@@ -123,3 +123,24 @@ def test_customer_debt_expense_report():
     kasir = _login("kasir", "kasir123")
     assert kasir.get("/expenses").status_code == 403
     admin.delete(f"/expenses/{e['id']}")
+
+
+def test_backup_import_monthly():
+    admin = _login("admin", "admin123")
+    b = admin.post("/backups").json()
+    assert b["collections"]["users"] >= 2 and b["size"] > 0
+    assert admin.get(f"/backups/{b['id']}/download").content[:2] == b"\x1f\x8b"
+    sku = f"T-{uuid.uuid4().hex[:6]}"
+    csv_data = f"SKU,Nama,Kategori,Harga Beli,Harga Jual,Stok,Stok Minimum\n{sku},Import Test,Sembako,100,150,7,2\n,Kosong,,1,1,1,1\n"
+    rows = admin.post("/products/import/preview", files={"file": ("p.csv", csv_data, "text/csv")}).json()
+    assert [r["status"] for r in rows] == ["new", "error"]
+    res = admin.post("/products/import", json={"rows": rows}).json()
+    assert res["created"] == 1 and res["skipped"] == 1
+    p = [x for x in admin.get(f"/products?q={sku}").json()][0]
+    assert p["stock"] == 7 and p["barcode"]
+    m = admin.get("/reports/monthly").json()
+    assert len(m["days"]) >= 28 and abs(m["net"] - (m["profit"] - m["expenses"])) < 0.01
+    assert admin.get("/reports/monthly?month=2026-13").status_code == 422
+    assert "due_debts" in admin.get("/dashboard").json()
+    admin.delete(f"/products/{p['id']}")
+    admin.delete(f"/backups/{b['id']}")

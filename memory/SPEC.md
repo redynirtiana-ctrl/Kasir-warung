@@ -32,6 +32,10 @@ users, categories, products (sku unique, barcode unique sparse), sales (invoice_
 - Settings: owner_whatsapp (WA target for reports), expense_categories
 - Seed/demo customers: Bu Siti (081234500001), Pak Joko (081234500002)
 - Frontend: /customers (Pelanggan + Piutang tabs, pay, WA reminder), /expenses, /reports tab Arsip Harian, WA buttons (wa.me links, no API)
+- backups (admin): GET/POST /backups, GET /backups/{id}/download, POST /backups/{id}/restore, POST /backups/restore-upload (multipart), DELETE /backups/{id}; cron POST /api/v1/cron/backup (23:59 WIB, keep 14 auto). Restore replaces all collections except backups/cron_runs, makes a pre-restore backup first
+- product import (admin): GET /products/import/template.xlsx, POST /products/import/preview (multipart xlsx/csv → ImportRow[] status new|update|error), POST /products/import {rows} → created/updated/skipped/new_categories
+- GET /reports/monthly?month=YYYY-MM → days[{omzet, modal, profit, expenses, net, transactions}] + totals; Dashboard.due_debts (open debts due ≤ today)
+- Frontend: /backup page, Products "Import Excel/CSV" dialog, Dashboard due-debts card, Reports tab "Laba Bulanan"; lib/api.ts apiUpload for multipart
 - reports (admin): GET /reports/daily?date, /reports/daily.pdf, /reports/daily.xlsx (file downloads), GET /reports/restock (stock ≤ min grouped by product.supplier, suggested = 2×min − stock)
 
 ## Frontend flows

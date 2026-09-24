@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from lib.auth import require_admin
 from lib.db import db
-from models.schemas import DailyReport, DailyReportSnapshot, RestockGroup, RestockItem
+from models.schemas import DailyReport, DailyReportSnapshot, MonthlyDay, MonthlyReport, RestockGroup, RestockItem
 from routers.sales import get_settings, store_tz
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -221,3 +221,30 @@ async def cron_daily_report(request: Request):
     if res.upserted_id is not None:
         asyncio.create_task(_nightly_job(run_id))
     return {"success": True, "message": "accepted"}
+
+
+@router.get("/monthly", response_model=MonthlyReport)
+async def monthly(month: str = "", _: dict = Depends(require_admin)):
+    import calendar
+    month = month or datetime.now(store_tz()).strftime("%Y-%m")
+    try:
+        y, m = map(int, month.split("-"))
+        last = calendar.monthrange(y, m)[1]
+    except (ValueError, calendar.IllegalMonthError):
+        raise HTTPException(422, "Format bulan harus YYYY-MM")
+    start, end = f"{month}-01", f"{month}-{last:02d}"
+    days = {f"{month}-{d:02d}": {"omzet": 0.0, "modal": 0.0, "profit": 0.0, "expenses": 0.0, "transactions": 0}
+            for d in range(1, last + 1)}
+    async for s in db.sales.find({"date": {"$gte": start, "$lte": end}, "status": "completed"}, {"_id": 0}):
+        d = days[s["date"]]
+        cost = sum(i["buy_price"] * i["qty"] for i in s["items"])
+        d["omzet"] += s["total"]
+        d["modal"] += cost
+        d["profit"] += s["subtotal"] - s["discount"] - cost
+        d["transactions"] += 1
+    async for e in db.expenses.find({"date": {"$gte": start, "$lte": end}}, {"_id": 0}):
+        days[e["date"]]["expenses"] += e["amount"]
+    rows = [MonthlyDay(date=k, net=v["profit"] - v["expenses"], **v) for k, v in days.items()]
+    tot = lambda f: sum(getattr(r, f) for r in rows)  # noqa: E731
+    return MonthlyReport(month=month, days=rows, omzet=tot("omzet"), modal=tot("modal"), profit=tot("profit"),
+                         expenses=tot("expenses"), net=tot("net"), transactions=int(tot("transactions")))

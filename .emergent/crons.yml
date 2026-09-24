@@ -7,3 +7,11 @@ crons:
     endpoint: "{{BASE_URL}}/api/v1/cron/daily-report"
     method: POST
     enabled: true
+  - name: daily-backup
+    description: "Creates an automatic daily database backup at 23:59 WIB and keeps the last 14"
+    cron: "59 23 * * *"
+    timezone: "Asia/Jakarta"
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    endpoint: "{{BASE_URL}}/api/v1/cron/backup"
+    method: POST
+    enabled: true

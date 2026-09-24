@@ -151,6 +151,16 @@ export interface Dashboard {
   recent_sales: Sale[];
   chart: ChartPoint[];
   payment_breakdown: Record<string, number>;
+  due_debts: DueDebt[];
+}
+
+export interface DueDebt {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  invoice_no: string;
+  remaining: number;
+  due_date: string;
 }
 
 export interface ApiErrorBody {
@@ -376,4 +386,57 @@ export interface DailyReportSnapshot {
   generated_at: string;
   source: "cron" | "manual";
   report: DailyReport;
+}
+
+export interface BackupInfo {
+  id: string;
+  filename: string;
+  size: number;
+  source: "manual" | "auto" | "pre-restore";
+  collections: Record<string, number>;
+  username: string;
+  created_at: string;
+}
+
+export interface ImportRow {
+  row: number;
+  sku: string;
+  barcode: string | null;
+  name: string;
+  category: string;
+  unit: string;
+  buy_price: number;
+  sell_price: number;
+  stock: number;
+  min_stock: number;
+  status: "new" | "update" | "error";
+  errors: string[];
+}
+
+export interface ImportResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  new_categories: string[];
+}
+
+export interface MonthlyDay {
+  date: string;
+  omzet: number;
+  modal: number;
+  profit: number;
+  expenses: number;
+  net: number;
+  transactions: number;
+}
+
+export interface MonthlyReport {
+  month: string;
+  days: MonthlyDay[];
+  omzet: number;
+  modal: number;
+  profit: number;
+  expenses: number;
+  net: number;
+  transactions: number;
 }

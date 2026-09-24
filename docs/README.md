@@ -37,6 +37,11 @@ Versi saat ini mencetak lewat dialog print browser (CSS `@page` 58/80mm). Atur p
 Scanner USB (HID) mengetik kode + Enter ke kolom scan di halaman Kasir (fokus otomatis, F3 untuk kembali fokus).
 
 ## CHANGELOG
+### 1.4.0
+- Backup database: manual, otomatis tiap malam 23:59 WIB (cron `daily-backup`, simpan 14 terakhir), unduh (.json.gz), restore dari daftar atau upload file (wajib ketik RESTORE; otomatis membuat backup "Sebelum restore"). File di `backend/backups/` (atur `BACKUP_DIR`)
+- Import produk Excel/CSV: template, preview + validasi (SKU/nama kosong, angka tidak valid, SKU dobel, barcode bentrok), SKU lama diperbarui, kategori baru dibuat otomatis, barcode kosong di-generate
+- Dashboard: kartu "Hutang Jatuh Tempo" (jatuh tempo hari ini & lewat)
+- Laporan Laba Bulanan: omzet, modal, laba kotor, pengeluaran, laba bersih + grafik harian, cetak, kirim WhatsApp
 ### 1.3.0
 - Laporan malam otomatis: cron platform `.emergent/crons.yml` (23:55 WIB) → `POST /api/v1/cron/daily-report` (Bearer `WEBHOOK_CRON_SECRET`, idempotent via X-Webhook-Id) menyimpan snapshot ke koleksi `daily_reports`; tab "Arsip Harian" + tombol "Simpan sekarang"
 - Pelanggan & hutang: CRUD pelanggan, riwayat transaksi, metode bayar "Hutang" di kasir (wajib pelanggan, DP, jatuh tempo), piutang dengan cicilan, status lunas, tanda lewat jatuh tempo, pengingat WhatsApp

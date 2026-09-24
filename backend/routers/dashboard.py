@@ -58,7 +58,10 @@ async def dashboard(range: str = "today", start: str = "", end: str = "", _: dic
                                    {"_id": 0}).sort("stock", 1).to_list(200)
     low = [LowStockItem(**p) for p in prods if p["stock"] > 0]
     out = [LowStockItem(**p) for p in prods if p["stock"] <= 0]
+    due = await db.debts.find({"status": "open", "due_date": {"$ne": None, "$lte": datetime.now(store_tz()).date().isoformat()}},
+                              {"_id": 0, "id": 1, "customer_name": 1, "invoice_no": 1, "remaining": 1, "due_date": 1, "customer_id": 1}
+                              ).sort("due_date", 1).to_list(100)
     recent = await db.sales.find({}, {"_id": 0}).sort("created_at", -1).to_list(8)
     return Dashboard(start=s, end=e, total_sales=total, transaction_count=len(sales), items_sold=items_sold,
                      profit=profit, low_stock=low, out_of_stock=out, recent_sales=[Sale(**r) for r in recent],
-                     chart=chart, payment_breakdown=breakdown)
+                     chart=chart, payment_breakdown=breakdown, due_debts=due)

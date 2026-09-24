@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { AlertTriangle, PackageX, Receipt, TrendingUp, Wallet, ShoppingBag } from "lucide-react";
+import { AlertTriangle, BellRing, PackageX, Receipt, TrendingUp, Wallet, ShoppingBag } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiGet } from "@/lib/api";
 import type { Dashboard as DashboardData } from "@/lib/types";
-import { num, PAYMENT_LABELS, rupiah, fmtDateTime } from "@/lib/format";
+import { num, PAYMENT_LABELS, rupiah, fmtDateTime, todayLocal } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -62,6 +62,23 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {d && d.due_debts.length > 0 && (
+        <div className="rounded-2xl border border-orange-300 bg-orange-50 p-5" data-testid="due-debts-card">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2 font-semibold text-orange-900"><BellRing className="size-4 animate-pulse" /> HUTANG JATUH TEMPO ({d.due_debts.length}) · {rupiah(d.due_debts.reduce((a, x) => a + x.remaining, 0))}</h3>
+            <Link to="/customers" className="text-sm font-medium text-orange-800 hover:underline" data-testid="due-debts-link">Kelola piutang</Link>
+          </div>
+          <ul className="mt-3 grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-3" data-testid="due-debts-list">
+            {d.due_debts.map((x) => (
+              <li key={x.id} className="flex justify-between rounded-lg bg-white/70 px-3 py-2">
+                <span><b>{x.customer_name}</b> <span className="font-mono text-xs text-muted-foreground">{x.invoice_no}</span><br /><span className="text-xs">{x.due_date < todayLocal() ? `Lewat sejak ${x.due_date}` : "Jatuh tempo hari ini"}</span></span>
+                <span className="font-semibold text-orange-900">{rupiah(x.remaining)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         {kpis.map((k) => (
           <div key={k.id} className={cn("rounded-2xl border p-5 shadow-sm", k.cls)}>
@@ -87,7 +104,7 @@ export default function Dashboard() {
                 <XAxis dataKey="date" tickFormatter={(v: string) => v.slice(5)} fontSize={12} />
                 <YAxis fontSize={12} tickFormatter={(v: number) => (v >= 1000 ? `${v / 1000}rb` : `${v}`)} />
                 <Tooltip formatter={(value: number) => rupiah(value)} labelFormatter={(label: string) => `Tanggal ${label}`} />
-                <Area type="monotone" dataKey="total" stroke="#15803D" strokeWidth={2} fill="url(#g)" />
+                <Area type="monotone" dataKey="total" stroke="#15803D" strokeWidth={2} fill="url(#g)" isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
           </div>

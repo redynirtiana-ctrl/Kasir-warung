@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, ShoppingCart, Package, Tags, Receipt, Users, Settings as SettingsIcon, LogOut, Menu, Store, PackagePlus, Truck, Undo2, BarChart3, Clock, Contact, Wallet,
+  LayoutDashboard, ShoppingCart, Package, Tags, Receipt, Users, Settings as SettingsIcon, LogOut, Menu, Store, PackagePlus, Truck, Undo2, BarChart3, Clock, Contact, Wallet, DatabaseBackup,
 } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ const NAV: { to: string; label: string; icon: typeof Store; roles: Role[]; key?:
   { to: "/shifts", label: "Shift", icon: Clock, roles: ["admin", "kasir"] },
   { to: "/sales", label: "Penjualan", icon: Receipt, roles: ["admin", "kasir"] },
   { to: "/users", label: "Pengguna", icon: Users, roles: ["admin"] },
+  { to: "/backup", label: "Backup", icon: DatabaseBackup, roles: ["admin"] },
   { to: "/settings", label: "Pengaturan", icon: SettingsIcon, roles: ["admin"] },
 ];
 

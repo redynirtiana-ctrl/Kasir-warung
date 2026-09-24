@@ -196,6 +196,7 @@ class Dashboard(BaseModel):
     recent_sales: list[Sale]
     chart: list[ChartPoint]
     payment_breakdown: dict[str, float]
+    due_debts: list[dict] = []
 
 
 # ---------- suppliers & purchases ----------
@@ -428,3 +429,63 @@ class DailyReportSnapshot(BaseModel):
     generated_at: datetime
     source: Literal["cron", "manual"]
     report: DailyReport
+
+
+# ---------- backup ----------
+class BackupInfo(BaseModel):
+    id: str
+    filename: str
+    size: int
+    source: Literal["manual", "auto", "pre-restore"]
+    collections: dict[str, int]
+    username: str
+    created_at: datetime
+
+
+# ---------- import ----------
+class ImportRow(BaseModel):
+    row: int
+    sku: str
+    barcode: str | None = None
+    name: str
+    category: str = ""
+    unit: str = "pcs"
+    buy_price: float = 0
+    sell_price: float = 0
+    stock: float = 0
+    min_stock: float = 0
+    status: Literal["new", "update", "error"] = "new"
+    errors: list[str] = []
+
+
+class ImportCommitIn(BaseModel):
+    rows: list[ImportRow] = Field(min_length=1, max_length=5000)
+
+
+class ImportResult(BaseModel):
+    created: int
+    updated: int
+    skipped: int
+    new_categories: list[str]
+
+
+# ---------- monthly P&L ----------
+class MonthlyDay(BaseModel):
+    date: str
+    omzet: float
+    modal: float
+    profit: float
+    expenses: float
+    net: float
+    transactions: int
+
+
+class MonthlyReport(BaseModel):
+    month: str
+    days: list[MonthlyDay]
+    omzet: float
+    modal: float
+    profit: float
+    expenses: float
+    net: float
+    transactions: int

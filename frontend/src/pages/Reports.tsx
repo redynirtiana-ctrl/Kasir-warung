@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FileSpreadsheet, FileText, Printer, ShoppingBasket, MessageCircle, Archive, Moon } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiGet, apiPost } from "@/lib/api";
-import type { DailyReport, DailyReportSnapshot, RestockGroup, Settings } from "@/lib/types";
+import type { DailyReport, DailyReportSnapshot, MonthlyReport, RestockGroup, Settings } from "@/lib/types";
 import { fmtDateTime, num, PAYMENT_LABELS, rupiah, waLink } from "@/lib/format";
 import { printHtml } from "@/lib/print";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -155,6 +155,64 @@ function RestockTab({ settings }: { settings?: Settings }) {
   );
 }
 
+function MonthlyTab({ settings }: { settings?: Settings }) {
+  const [month, setMonth] = useState(todayLocal().slice(0, 7));
+  const { data: r } = useQuery({ queryKey: ["reports", "monthly", month], queryFn: () => apiGet<MonthlyReport>(`/v1/reports/monthly?month=${month}`), enabled: !!month });
+  const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+  const print = () => {
+    if (!r) return;
+    const rows = r.days.filter((d) => d.transactions || d.expenses).map((d) => `<tr><td>${d.date}</td><td class="r">${num(d.transactions)}</td><td class="r">${rupiah(d.omzet)}</td><td class="r">${rupiah(d.modal)}</td><td class="r">${rupiah(d.expenses)}</td><td class="r">${rupiah(d.net)}</td></tr>`).join("");
+    printHtml(`<h1>${settings?.store_name ?? ""}</h1><h2>LAPORAN LABA RUGI — ${monthLabel}</h2>
+<table><tr><td>Omzet</td><td class="r">${rupiah(r.omzet)}</td></tr><tr><td>Modal (HPP)</td><td class="r">${rupiah(r.modal)}</td></tr><tr><td>Laba kotor</td><td class="r">${rupiah(r.profit)}</td></tr><tr><td>Pengeluaran</td><td class="r">${rupiah(r.expenses)}</td></tr><tr><th>LABA BERSIH</th><th class="r">${rupiah(r.net)}</th></tr></table>
+<h2 style="margin-top:18px">Rincian harian</h2><table><tr><th>Tanggal</th><th>Trx</th><th>Omzet</th><th>Modal</th><th>Pengeluaran</th><th>Laba bersih</th></tr>${rows}</table>`, A4_CSS);
+  };
+  const cards: [string, string, string, string][] = r ? [
+    ["Omzet", rupiah(r.omzet), "bg-green-100 text-green-900", "monthly-omzet"],
+    ["Laba kotor", rupiah(r.profit), "bg-white", "monthly-profit"],
+    ["Pengeluaran", rupiah(r.expenses), "bg-rose-100 text-rose-900", "monthly-expenses"],
+    ["Laba bersih", rupiah(r.net), "bg-amber-100 text-amber-900", "monthly-net"],
+  ] : [];
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-44" data-testid="monthly-month-input" />
+        <Button variant="outline" onClick={print} disabled={!r} data-testid="monthly-print-button"><Printer /> Cetak</Button>
+        <Button className="bg-[#25D366] text-white hover:bg-[#1ebe5b]" disabled={!r} data-testid="monthly-wa-button"
+          onClick={() => r && sendWa(settings, `*LAPORAN LABA RUGI*\n${settings?.store_name ?? ""} · ${monthLabel}\n\nTransaksi: ${num(r.transactions)}\nOmzet: ${rupiah(r.omzet)}\nModal: ${rupiah(r.modal)}\nLaba kotor: ${rupiah(r.profit)}\nPengeluaran: ${rupiah(r.expenses)}\n*Laba bersih: ${rupiah(r.net)}*`)}>
+          <MessageCircle /> Kirim WhatsApp
+        </Button>
+      </div>
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {cards.map(([l, v, cls, id]) => (
+          <div key={id} className={`rounded-2xl border p-5 shadow-sm ${cls}`}>
+            <div className="text-sm font-medium opacity-80">{l}</div>
+            <div className="mt-2 font-heading text-2xl font-bold" data-testid={id}>{v}</div>
+          </div>
+        ))}
+      </div>
+      {r && (
+        <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <h3 className="mb-3 font-semibold">Omzet, pengeluaran & laba bersih per hari — {monthLabel}</h3>
+          <div className="h-80" data-testid="monthly-chart">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={r.days}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                <XAxis dataKey="date" tickFormatter={(v: string) => v.slice(8)} fontSize={11} />
+                <YAxis fontSize={11} tickFormatter={(v: number) => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}rb` : `${v}`)} />
+                <Tooltip formatter={(value: number) => rupiah(value)} labelFormatter={(label: string) => longDate(label)} />
+                <Legend />
+                <Bar dataKey="omzet" name="Omzet" fill="#15803D" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="expenses" name="Pengeluaran" fill="#E11D48" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                <Line type="monotone" dataKey="net" name="Laba bersih" stroke="#D97706" strokeWidth={2} dot={false} isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ArchiveTab({ settings }: { settings?: Settings }) {
   const qc = useQueryClient();
   const [view, setView] = useState<DailyReportSnapshot | null>(null);
@@ -211,10 +269,12 @@ export default function Reports() {
       <Tabs defaultValue="daily">
         <TabsList>
           <TabsTrigger value="daily" data-testid="reports-tab-daily">Laporan Harian</TabsTrigger>
+          <TabsTrigger value="monthly" data-testid="reports-tab-monthly">Laba Bulanan</TabsTrigger>
           <TabsTrigger value="restock" data-testid="reports-tab-restock">Saran Belanja</TabsTrigger>
           <TabsTrigger value="archive" data-testid="reports-tab-archive">Arsip Harian</TabsTrigger>
         </TabsList>
         <TabsContent value="daily" className="mt-4"><DailyTab settings={settings} /></TabsContent>
+        <TabsContent value="monthly" className="mt-4"><MonthlyTab settings={settings} /></TabsContent>
         <TabsContent value="restock" className="mt-4"><RestockTab settings={settings} /></TabsContent>
         <TabsContent value="archive" className="mt-4"><ArchiveTab settings={settings} /></TabsContent>
       </Tabs>

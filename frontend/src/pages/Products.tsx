@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOutletContext, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Barcode, Printer, Search, PackagePlus, Wand2 } from "lucide-react";
-import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
-import type { Category, Product, ProductIn, StockAdjustIn, User } from "@/lib/types";
+import { Plus, Pencil, Trash2, Barcode, Printer, Search, PackagePlus, Wand2, FileUp } from "lucide-react";
+import { apiDelete, apiGet, apiPost, apiPut, apiUpload } from "@/lib/api";
+import type { Category, ImportResult, ImportRow, Product, ProductIn, StockAdjustIn, User } from "@/lib/types";
 import { errMsg, num, rupiah, stockStatus } from "@/lib/format";
 import { barcodeSvg, printLabels } from "@/lib/print";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +41,9 @@ export default function Products() {
   const [labelItems, setLabelItems] = useState<Product[]>([]);
   const [labelTitle, setLabelTitle] = useState("Cetak Label Barcode");
   const [labelSize, setLabelSize] = useState({ widthMm: 50, heightMm: 30, copies: 1 });
+  const [importOpen, setImportOpen] = useState(false);
+  const [importRows, setImportRows] = useState<ImportRow[] | null>(null);
+  const [importing, setImporting] = useState(false);
   const [adjust, setAdjust] = useState<{ product: Product; body: StockAdjustIn } | null>(null);
 
   useEffect(() => {
@@ -112,6 +115,31 @@ export default function Products() {
     setLabelOpen(true);
   }
 
+  const previewFile = async (file: File) => {
+    const f = new FormData();
+    f.append("file", file);
+    setImporting(true);
+    try {
+      setImportRows(await apiUpload<ImportRow[]>("/v1/products/import/preview", f));
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setImporting(false);
+    }
+  };
+  const commitImport = useMutation({
+    mutationFn: () => apiPost<ImportResult>("/v1/products/import", { rows: importRows }),
+    onSuccess: (r) => {
+      toast.success(`Import selesai: ${r.created} baru, ${r.updated} diperbarui, ${r.skipped} dilewati${r.new_categories.length ? ` · kategori baru: ${r.new_categories.join(", ")}` : ""}`);
+      setImportOpen(false);
+      setImportRows(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+  const importCounts = { new: 0, update: 0, error: 0 };
+  importRows?.forEach((r) => { importCounts[r.status] += 1; });
+
   const selectedProducts = useMemo(() => products.filter((p) => selected.has(p.id)), [products, selected]);
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const set = <K extends keyof ProductIn>(k: K, v: ProductIn[K]) => setForm((f) => (f ? { ...f, [k]: v } : f));
@@ -128,6 +156,7 @@ export default function Products() {
             <Button variant="outline" disabled={!selected.size} onClick={() => showLabels(selectedProducts, "Cetak Label Barcode")} data-testid="print-labels-button">
               <Printer /> Cetak Label ({selected.size})
             </Button>
+            <Button variant="outline" onClick={() => { setImportRows(null); setImportOpen(true); }} data-testid="import-products-button"><FileUp /> Import Excel/CSV</Button>
             <Button onClick={() => openNew()} data-testid="add-product-button"><Plus /> Tambah Produk</Button>
           </div>
         )}
@@ -239,6 +268,48 @@ export default function Products() {
               <DialogFooter><Button onClick={() => adj.mutate(adjust.body)} disabled={adj.isPending} data-testid="adjust-save-button">Simpan</Button></DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+          <DialogHeader><DialogTitle><FileUp className="mr-2 inline size-5" />Import Produk dari Excel / CSV</DialogTitle></DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">Kolom: SKU, Barcode, Nama, Kategori, Satuan, Harga Beli, Harga Jual, Stok, Stok Minimum. SKU yang sudah ada akan diperbarui (stok di-set sesuai file). Barcode kosong = dibuat otomatis. Kategori baru dibuat otomatis.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <a className={buttonVariants({ variant: "outline", size: "sm" })} href="/api/v1/products/import/template.xlsx" data-testid="import-template-link">Unduh template</a>
+              <Input type="file" accept=".xlsx,.csv" className="max-w-xs" onChange={(e) => { const f = e.target.files?.[0]; if (f) void previewFile(f); }} data-testid="import-file-input" />
+              {importing && <span className="text-muted-foreground">Memeriksa data…</span>}
+            </div>
+            {importRows && (
+              <>
+                <div className="flex gap-2" data-testid="import-summary">
+                  <Badge className="bg-green-100 text-green-800">{importCounts.new} baru</Badge>
+                  <Badge className="bg-sky-100 text-sky-800">{importCounts.update} update</Badge>
+                  <Badge className="bg-rose-100 text-rose-800">{importCounts.error} error (dilewati)</Badge>
+                </div>
+                <div className="max-h-80 overflow-y-auto rounded-lg border">
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Baris</TableHead><TableHead>SKU</TableHead><TableHead>Nama</TableHead><TableHead>Kategori</TableHead><TableHead className="text-right">Beli</TableHead><TableHead className="text-right">Jual</TableHead><TableHead className="text-right">Stok</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {importRows.map((r) => (
+                        <TableRow key={r.row} className={r.status === "error" ? "bg-rose-50" : ""} data-testid={`import-row-${r.row}`}>
+                          <TableCell>{r.row}</TableCell><TableCell className="font-mono">{r.sku || "-"}</TableCell><TableCell>{r.name || "-"}</TableCell><TableCell>{r.category || "-"}</TableCell>
+                          <TableCell className="text-right">{num(r.buy_price)}</TableCell><TableCell className="text-right">{num(r.sell_price)}</TableCell><TableCell className="text-right">{num(r.stock)}</TableCell>
+                          <TableCell>{r.status === "error" ? <span className="text-xs text-rose-700">{r.errors.join(", ")}</span> : <Badge variant="outline">{r.status === "new" ? "Baru" : "Update"}</Badge>}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button disabled={!importRows || importCounts.new + importCounts.update === 0 || commitImport.isPending} onClick={() => commitImport.mutate()} data-testid="import-commit-button">
+              {commitImport.isPending ? "Mengimpor…" : `Import ${importCounts.new + importCounts.update} produk`}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
