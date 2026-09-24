@@ -6,7 +6,8 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException
 from pymongo import ReturnDocument
 
-from lib.auth import audit, get_current_user, has_perm, require_admin, require_perm
+from fastapi import Request
+from lib.auth import audit, get_current_user, has_perm, require_admin, verify_admin_pin
 from lib.db import db
 from lib.pricing import effective_price
 from models.schemas import Sale, SaleIn, Settings, VoidIn
@@ -31,10 +32,12 @@ async def next_invoice_no(prefix: str, date_str: str) -> str:
 
 
 @router.post("/sales", response_model=Sale)
-async def create_sale(body: SaleIn, user: dict = Depends(get_current_user)):
+async def create_sale(body: SaleIn, request: Request, user: dict = Depends(get_current_user)):
+    ip = request.client.host if request.client else "unknown"
+    approved = False
     if (body.discount_value > 0 or any(i.discount > 0 for i in body.items)) and not has_perm(user, "give_discount"):
-        await audit(user, "permission_denied", "give_discount")
-        raise HTTPException(403, "Tidak punya izin memberi diskon")
+        await verify_admin_pin(body.approval_pin, user, "diskon (kasir tanpa izin diskon)", ip)
+        approved = True
     if body.payment_method == "hutang" and not has_perm(user, "sell_on_credit"):
         await audit(user, "permission_denied", "sell_on_credit")
         raise HTTPException(403, "Tidak punya izin transaksi hutang")
@@ -77,6 +80,13 @@ async def create_sale(body: SaleIn, user: dict = Depends(get_current_user)):
     subtotal = sum(i["subtotal"] for i in items)
     discount = subtotal * body.discount_value / 100 if body.discount_type == "percent" else body.discount_value
     discount = round(min(discount, subtotal))
+    manual_disc = discount + sum(i["discount"] for i in items)
+    gross_total = sum(i["price"] * i["qty"] for i in items)
+    if user.get("role") != "admin" and not approved and gross_total > 0:
+        pct = manual_disc / gross_total * 100
+        if pct > settings.max_cashier_discount_percent + 1e-9:
+            await verify_admin_pin(body.approval_pin, user,
+                                   f"diskon {pct:.1f}% melebihi batas {settings.max_cashier_discount_percent:g}%", ip)
     customer = None
     if body.customer_id:
         customer = await db.customers.find_one({"id": body.customer_id}, {"_id": 0})
@@ -172,7 +182,9 @@ async def get_sale(id: str, _: dict = Depends(get_current_user)):
 
 
 @router.post("/sales/{id}/void", response_model=Sale)
-async def void_sale(id: str, body: VoidIn, admin: dict = Depends(require_perm("void_sale"))):
+async def void_sale(id: str, body: VoidIn, request: Request, admin: dict = Depends(get_current_user)):
+    if not has_perm(admin, "void_sale"):
+        await verify_admin_pin(body.approval_pin, admin, "void transaksi", request.client.host if request.client else "unknown")
     doc = await db.sales.find_one_and_update({"id": id, "status": "completed"},
                                              {"$set": {"status": "void", "void_reason": body.reason,
                                                        "voided_by": admin["username"],

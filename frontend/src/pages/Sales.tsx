@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOutletContext } from "react-router-dom";
 import { can } from "@/lib/types";
+import PinDialog, { needsPin } from "@/components/PinDialog";
 import { toast } from "sonner";
 import { Printer, Ban, Eye } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
@@ -29,17 +30,19 @@ export default function Sales() {
   });
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: () => apiGet<Settings>("/v1/settings") });
 
+  const [pinReason, setPinReason] = useState<string | null>(null);
   const voidM = useMutation({
-    mutationFn: (s: Sale) => apiPost<Sale>(`/v1/sales/${s.id}/void`, { reason: voidReason }),
+    mutationFn: ({ s, pin }: { s: Sale; pin?: string }) => apiPost<Sale>(`/v1/sales/${s.id}/void`, { reason: voidReason, approval_pin: pin ?? null }),
     onSuccess: (s) => {
       toast.success(`Transaksi ${s.invoice_no} di-void, stok dikembalikan`);
       setView(s);
       setVoidReason("");
+      setPinReason(null);
       qc.invalidateQueries({ queryKey: ["sales"] });
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
-    onError: (e) => toast.error(errMsg(e)),
+    onError: (e) => { const m = errMsg(e); if (needsPin(m)) { if (m === "PIN admin salah") toast.error(m); setPinReason("Void transaksi butuh persetujuan admin"); } else toast.error(m); },
   });
 
   const done = sales.filter((s) => s.status === "completed");
@@ -94,11 +97,11 @@ export default function Sales() {
             <div className="max-h-80 overflow-y-auto rounded-lg border border-dashed bg-amber-50 p-3 font-mono text-xs [&_.b]:font-bold [&_.c]:text-center [&_.hr]:my-1 [&_.hr]:border-t [&_.hr]:border-dashed [&_.hr]:border-stone-400 [&_.r]:flex [&_.r]:justify-between"
               data-testid="sale-receipt-preview" dangerouslySetInnerHTML={{ __html: receiptHtml(view, settings) }} />
             {view.status === "void" && <p className="text-sm text-rose-700">Alasan void: {view.void_reason}</p>}
-            {can(me, "void_sale") && view.status === "completed" && (
+            {view.status === "completed" && (
               <div className="space-y-2 rounded-lg border border-rose-200 bg-rose-50 p-3">
                 <Input placeholder="Alasan void (wajib)" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} data-testid="void-reason-input" />
-                <Button variant="destructive" className="w-full" disabled={voidReason.trim().length < 3 || voidM.isPending} onClick={() => voidM.mutate(view)} data-testid="void-submit-button">
-                  <Ban /> Void Transaksi ({num(view.items.length)} item)
+                <Button variant="destructive" className="w-full" disabled={voidReason.trim().length < 3 || voidM.isPending} onClick={() => voidM.mutate({ s: view })} data-testid="void-submit-button">
+                  <Ban /> Void Transaksi ({num(view.items.length)} item){can(me, "void_sale") ? "" : " · PIN admin"}
                 </Button>
               </div>
             )}
@@ -106,6 +109,7 @@ export default function Sales() {
           </DialogContent>
         )}
       </Dialog>
+      <PinDialog reason={pinReason} pending={voidM.isPending} onClose={() => setPinReason(null)} onSubmit={(pin) => view && voidM.mutate({ s: view, pin })} />
     </div>
   );
 }

@@ -37,6 +37,10 @@ Versi saat ini mencetak lewat dialog print browser (CSS `@page` 58/80mm). Atur p
 Scanner USB (HID) mengetik kode + Enter ke kolom scan di halaman Kasir (fokus otomatis, F3 untuk kembali fokus).
 
 ## CHANGELOG
+### 1.8.0
+- Batas diskon kasir (Pengaturan, default 10%): diskon manual (per barang + transaksi, poin tidak dihitung) di atas batas → wajib PIN admin
+- PIN persetujuan admin: admin atur PIN 4–6 angka di Pengguna → "Atur PIN Persetujuan Saya" (wajib password). Di kasir muncul dialog PIN untuk diskon di atas batas, diskon oleh kasir tanpa izin diskon, dan void oleh kasir tanpa izin void. PIN salah dibatasi (rate limit) & semua persetujuan/penolakan tercatat di audit log
+- Tanggal kedaluwarsa: kolom kedaluwarsa per barang di form Pembelian → disimpan sebagai batch; dashboard menampilkan "SEGERA KEDALUWARSA" (≤ N hari, atur di Pengaturan, default 30) dan yang sudah lewat, selama stok masih ada; admin bisa tandai "Sudah ditangani"
 ### 1.7.0
 - Hak akses kasir per fitur (halaman Pengguna): beri diskon, jual hutang, void transaksi, proses retur penjualan, terima cicilan hutang & lihat piutang, lihat laporan. Admin/Owner selalu punya semua akses. Default kasir: diskon + hutang
 - Ditegakkan di server (`require_perm` / `has_perm` di `backend/lib/auth.py`), dibaca ulang dari database setiap request sehingga perubahan izin langsung berlaku tanpa login ulang; penolakan dicatat di audit log (`permission_denied`)

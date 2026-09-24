@@ -87,6 +87,12 @@ async def create_purchase(body: PurchaseIn, admin: dict = Depends(require_admin)
                         total=sum(i["subtotal"] for i in items), note=body.note,
                         username=admin["username"], created_at=now)
     await db.purchases.insert_one(purchase.model_dump())
+    batches = [{"id": str(uuid.uuid4()), "product_id": i.product_id, "product_name": products[i.product_id]["name"],
+                "purchase_id": purchase.id, "invoice_no": body.invoice_no, "supplier_name": sup["name"],
+                "expiry_date": i.expiry_date, "qty": i.qty, "dismissed": False, "created_at": now}
+               for i in body.items if i.expiry_date]
+    if batches:
+        await db.product_batches.insert_many(batches)
 
     for it in items:
         update: dict = {"$inc": {"stock": it["qty"]}, "$set": {"updated_at": now, "supplier": sup["name"]}}
@@ -103,3 +109,19 @@ async def create_purchase(body: PurchaseIn, admin: dict = Depends(require_admin)
                               f"Pembelian {body.invoice_no} ({sup['name']})")
     await audit(admin, "purchase", f"{body.invoice_no} {sup['name']} total {purchase.total:g}")
     return purchase
+
+
+
+@router.get("/batches/expiring")
+async def expiring_batches(_: dict = Depends(require_admin)):
+    from routers.dashboard import expiring_list
+    return await expiring_list()
+
+
+@router.post("/batches/{id}/dismiss")
+async def dismiss_batch(id: str, admin: dict = Depends(require_admin)):
+    r = await db.product_batches.update_one({"id": id}, {"$set": {"dismissed": True}})
+    if not r.matched_count:
+        raise HTTPException(404, "Batch tidak ditemukan")
+    await audit(admin, "batch_dismiss", id)
+    return {"success": True, "message": "Peringatan kedaluwarsa ditandai selesai"}

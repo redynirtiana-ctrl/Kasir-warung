@@ -130,7 +130,7 @@ export default function Purchases() {
               </div>
               <div className="rounded-lg border">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Produk</TableHead><TableHead className="w-24">Qty</TableHead><TableHead className="w-36">Harga beli</TableHead><TableHead className="text-right">Subtotal</TableHead><TableHead /></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>Produk</TableHead><TableHead className="w-24">Qty</TableHead><TableHead className="w-36">Harga beli</TableHead><TableHead className="w-40">Kedaluwarsa</TableHead><TableHead className="text-right">Subtotal</TableHead><TableHead /></TableRow></TableHeader>
                   <TableBody>
                     {form.items.map((i, idx) => {
                       const p = byId.get(i.product_id);
@@ -140,6 +140,7 @@ export default function Purchases() {
                           <TableCell><Input type="number" min={0} value={i.qty} onChange={(e) => setItem(idx, { qty: Number(e.target.value) })} data-testid={`purchase-qty-${p?.sku}`} /></TableCell>
                           <TableCell><Input type="number" min={0} value={i.buy_price} onChange={(e) => setItem(idx, { buy_price: Number(e.target.value) })} data-testid={`purchase-price-${p?.sku}`} /></TableCell>
                           <TableCell className="text-right">{rupiah(i.qty * i.buy_price)}</TableCell>
+                          <TableCell><Input type="date" value={i.expiry_date ?? ""} onChange={(e) => setItem(idx, { expiry_date: e.target.value || null })} data-testid={`purchase-expiry-${p?.sku}`} /></TableCell>
                           <TableCell><Button size="icon-sm" variant="ghost" onClick={() => setForm({ ...form, items: form.items.filter((_, k) => k !== idx) })} data-testid={`purchase-remove-${p?.sku}`}><Trash2 className="text-rose-600" /></Button></TableCell>
                         </TableRow>
                       );

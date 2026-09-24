@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, KeyRound } from "lucide-react";
 import { apiGet, apiPost, apiPut } from "@/lib/api";
 import type { Role, User, UserCreate, Permission, PermissionInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,14 @@ export default function Users() {
   const { data: catalog = [] } = useQuery({ queryKey: ["permissions"], queryFn: () => apiGet<PermissionInfo[]>("/v1/auth/permissions") });
   const defaults = catalog.filter((p) => p.default).map((p) => p.key);
 
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinForm, setPinForm] = useState({ pin: "", current_password: "" });
+  const savePin = useMutation({
+    mutationFn: () => apiPut<{ message: string }>("/v1/users/me/pin", pinForm),
+    onSuccess: () => { toast.success("PIN persetujuan disimpan"); setPinOpen(false); setPinForm({ pin: "", current_password: "" }); qc.invalidateQueries({ queryKey: ["users"] }); qc.invalidateQueries({ queryKey: ["me"] }); },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
   const save = useMutation({
     mutationFn: (f: Form) =>
       editing
@@ -40,7 +48,9 @@ export default function Users() {
           <h1 className="text-3xl font-bold tracking-tight">Pengguna</h1>
           <p className="text-sm text-muted-foreground">Kelola akun admin & kasir</p>
         </div>
-        <Button onClick={() => { setEditing(null); setForm({ username: "", full_name: "", role: "kasir", password: "", active: true, permissions: defaults }); }} data-testid="add-user-button"><Plus /> Tambah Pengguna</Button>
+        <div className="flex gap-2">
+        <Button variant="outline" onClick={() => setPinOpen(true)} data-testid="set-pin-button"><KeyRound /> Atur PIN Persetujuan Saya</Button>
+        <Button onClick={() => { setEditing(null); setForm({ username: "", full_name: "", role: "kasir", password: "", active: true, permissions: defaults }); }} data-testid="add-user-button"><Plus /> Tambah Pengguna</Button></div>
       </div>
       <div className="rounded-2xl border bg-white shadow-sm">
         <Table>
@@ -51,7 +61,7 @@ export default function Users() {
                 <TableCell className="font-mono">{u.username}</TableCell>
                 <TableCell>{u.full_name}</TableCell>
                 <TableCell><Badge className={u.role === "admin" ? "bg-amber-100 text-amber-900" : "bg-green-100 text-green-900"}>{u.role === "admin" ? "Admin / Owner" : "Kasir"}</Badge></TableCell>
-                <TableCell className="max-w-72 text-xs text-muted-foreground" data-testid={`user-perms-${u.username}`}>{u.role === "admin" ? "Semua akses" : catalog.filter((p) => u.permissions.includes(p.key)).map((p) => p.label.split(" (")[0]).join(", ") || "Transaksi saja"}</TableCell>
+                <TableCell className="max-w-72 text-xs text-muted-foreground" data-testid={`user-perms-${u.username}`}>{u.role === "admin" ? (u.has_pin ? "Semua akses · PIN aktif" : "Semua akses · PIN belum diatur") : catalog.filter((p) => u.permissions.includes(p.key)).map((p) => p.label.split(" (")[0]).join(", ") || "Transaksi saja"}</TableCell>
                 <TableCell>{u.active ? "Aktif" : <Badge variant="outline">Nonaktif</Badge>}</TableCell>
                 <TableCell className="text-right">
                   <Button size="icon-sm" variant="ghost" onClick={() => { setEditing(u); setForm({ username: u.username, full_name: u.full_name, role: u.role, password: "", active: u.active, permissions: u.permissions }); }} data-testid={`user-edit-${u.username}`}><Pencil /></Button>
@@ -89,6 +99,17 @@ export default function Users() {
               <DialogFooter><Button type="submit" disabled={save.isPending} data-testid="user-save-button">Simpan</Button></DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={pinOpen} onOpenChange={setPinOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>PIN Persetujuan Admin</DialogTitle></DialogHeader>
+          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); savePin.mutate(); }}>
+            <p className="text-sm text-muted-foreground">PIN 4–6 angka ini diketik di mesin kasir untuk menyetujui void atau diskon di atas batas.</p>
+            <div className="space-y-1"><Label>PIN baru</Label><Input type="password" inputMode="numeric" maxLength={6} value={pinForm.pin} onChange={(e) => setPinForm({ ...pinForm, pin: e.target.value.replace(/\D/g, "") })} data-testid="new-pin-input" /></div>
+            <div className="space-y-1"><Label>Password akun Anda</Label><Input type="password" value={pinForm.current_password} onChange={(e) => setPinForm({ ...pinForm, current_password: e.target.value })} data-testid="pin-password-input" /></div>
+            <DialogFooter><Button type="submit" disabled={pinForm.pin.length < 4 || !pinForm.current_password || savePin.isPending} data-testid="save-pin-button">Simpan PIN</Button></DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

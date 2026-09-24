@@ -8,6 +8,7 @@ export interface User {
   role: Role;
   active: boolean;
   permissions: Permission[];
+  has_pin: boolean;
 }
 
 export type Permission = "give_discount" | "sell_on_credit" | "void_sale" | "process_returns" | "receive_debt_payment" | "view_reports";
@@ -110,6 +111,7 @@ export interface SaleIn {
   customer_id: string | null;
   due_date: string | null;
   redeem_points: number;
+  approval_pin?: string | null;
 }
 
 export interface SaleItem {
@@ -165,6 +167,8 @@ export interface Settings {
   points_per_amount: number;
   point_value: number;
   min_redeem_points: number;
+  max_cashier_discount_percent: number;
+  expiry_warning_days: number;
 }
 
 export interface ChartPoint {
@@ -194,6 +198,20 @@ export interface Dashboard {
   chart: ChartPoint[];
   payment_breakdown: Record<string, number>;
   due_debts: DueDebt[];
+  expiring: ExpiringBatch[];
+}
+
+export interface ExpiringBatch {
+  id: string;
+  product_name: string;
+  sku: string;
+  expiry_date: string;
+  days_left: number;
+  qty: number;
+  stock: number;
+  unit: string;
+  invoice_no: string;
+  supplier_name: string;
 }
 
 export interface DueDebt {
@@ -230,6 +248,7 @@ export interface PurchaseItemIn {
   product_id: string;
   qty: number;
   buy_price: number;
+  expiry_date?: string | null;
 }
 
 export interface PurchaseIn {

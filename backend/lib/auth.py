@@ -40,6 +40,8 @@ async def get_current_user(request: Request) -> dict:
     except jwt.PyJWTError:
         raise HTTPException(401, "Sesi tidak valid atau kedaluwarsa")
     user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+    if user:
+        user["pin_set"] = bool(user.pop("pin_hash", None))
     if not user or not user.get("active", True):
         raise HTTPException(401, "Pengguna tidak aktif")
     return user
@@ -115,3 +117,20 @@ def require_perm(perm: str):
             raise HTTPException(403, f"Tidak punya izin: {PERMISSIONS.get(perm, perm)}")
         return user
     return dep
+
+
+
+# ---------- admin PIN approval (on-the-spot override at the cashier) ----------
+async def verify_admin_pin(pin: str | None, requester: dict, action: str, ip: str) -> dict:
+    """Returns the approving admin or raises 403. Failed attempts share the login rate limiter."""
+    key = f"pin:{ip}"
+    check_rate_limit(key)
+    if pin:
+        async for a in db.users.find({"role": "admin", "active": True, "pin_hash": {"$exists": True}}, {"_id": 0}):
+            if verify_password(pin, a["pin_hash"]):
+                await audit(requester, "admin_approval", f"{action} disetujui oleh {a['full_name']}")
+                return a
+        record_failure(key)
+        await audit(requester, "admin_approval_failed", action)
+        raise HTTPException(403, "PIN admin salah")
+    raise HTTPException(403, f"Butuh PIN admin: {action}")

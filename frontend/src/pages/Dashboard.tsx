@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { AlertTriangle, BellRing, PackageX, Receipt, TrendingUp, Wallet, ShoppingBag } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useOutletContext } from "react-router-dom";
+import { toast } from "sonner";
+import { AlertTriangle, BellRing, CalendarClock, PackageX, Receipt, TrendingUp, Wallet, ShoppingBag } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { apiGet } from "@/lib/api";
-import type { Dashboard as DashboardData } from "@/lib/types";
+import { apiGet, apiPost } from "@/lib/api";
+import type { Dashboard as DashboardData, User } from "@/lib/types";
 import { num, PAYMENT_LABELS, rupiah, fmtDateTime, todayLocal } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +20,12 @@ const RANGES = [
 ] as const;
 
 export default function Dashboard() {
+  const me = useOutletContext<User>();
+  const qc = useQueryClient();
+  const dismiss = useMutation({
+    mutationFn: (id: string) => apiPost(`/v1/batches/${id}/dismiss`),
+    onSuccess: () => { toast.success("Ditandai sudah ditangani"); qc.invalidateQueries({ queryKey: ["dashboard"] }); },
+  });
   const [range, setRange] = useState<string>("today");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -73,6 +80,26 @@ export default function Dashboard() {
               <li key={x.id} className="flex justify-between rounded-lg bg-white/70 px-3 py-2">
                 <span><b>{x.customer_name}</b> <span className="font-mono text-xs text-muted-foreground">{x.invoice_no}</span><br /><span className="text-xs">{x.due_date < todayLocal() ? `Lewat sejak ${x.due_date}` : "Jatuh tempo hari ini"}</span></span>
                 <span className="font-semibold text-orange-900">{rupiah(x.remaining)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {d && d.expiring.length > 0 && (
+        <div className="rounded-2xl border border-rose-300 bg-rose-50 p-5" data-testid="expiring-card">
+          <h3 className="flex items-center gap-2 font-semibold text-rose-900"><CalendarClock className="size-4" /> SEGERA KEDALUWARSA ({d.expiring.length})</h3>
+          <ul className="mt-3 grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-3" data-testid="expiring-list">
+            {d.expiring.map((x) => (
+              <li key={x.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/70 px-3 py-2" data-testid={`expiring-${x.sku}`}>
+                <span><b>{x.product_name}</b> <span className="text-xs text-muted-foreground">stok {num(x.stock)} {x.unit}</span><br />
+                  <span className="text-xs">{x.expiry_date} · {x.supplier_name} · {x.invoice_no}</span></span>
+                <span className="flex flex-col items-end gap-1">
+                  <Badge className={x.days_left < 0 ? "bg-rose-600 text-white" : x.days_left <= 7 ? "bg-orange-500 text-white" : "bg-amber-100 text-amber-900"} data-testid={`expiring-days-${x.sku}`}>
+                    {x.days_left < 0 ? `LEWAT ${-x.days_left} hari` : x.days_left === 0 ? "HARI INI" : `${x.days_left} hari lagi`}
+                  </Badge>
+                  {me?.role === "admin" && <button className="text-xs text-rose-700 hover:underline" onClick={() => dismiss.mutate(x.id)} data-testid={`expiring-dismiss-${x.sku}`}>Sudah ditangani</button>}
+                </span>
               </li>
             ))}
           </ul>

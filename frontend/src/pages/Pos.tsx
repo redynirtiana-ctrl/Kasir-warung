@@ -7,6 +7,7 @@ import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { effectivePrice, promoActive } from "@/lib/pricing";
 import type { DisplayState } from "@/lib/types";
 import { can } from "@/lib/types";
+import PinDialog, { needsPin } from "@/components/PinDialog";
 import type { Category, Customer, PaymentMethod, Product, Sale, SaleIn, Settings } from "@/lib/types";
 import { todayLocal, errMsg, num, PAYMENT_LABELS, rupiah, stockStatus } from "@/lib/format";
 import { printReceipt, receiptHtml } from "@/lib/print";
@@ -70,6 +71,8 @@ export default function Pos() {
   const [customerId, setCustomerId] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [redeemPts, setRedeemPts] = useState(0);
+  const [pinReason, setPinReason] = useState<string | null>(null);
+  const lastPayload = useRef<SaleIn | null>(null);
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
@@ -206,9 +209,10 @@ export default function Pos() {
   };
 
   const pay = useMutation({
-    mutationFn: (body: SaleIn) => apiPost<Sale>("/v1/sales", body),
+    mutationFn: (body: SaleIn) => { lastPayload.current = body; return apiPost<Sale>("/v1/sales", body); },
     onSuccess: (sale) => {
       setLastSale(sale);
+      setPinReason(null);
       setPayOpen(false);
       setReceiptOpen(true);
       removeCart(cart.id);
@@ -221,7 +225,7 @@ export default function Pos() {
       qc.invalidateQueries({ queryKey: ["customers"] });
       qc.invalidateQueries({ queryKey: ["debts"] });
     },
-    onError: (e) => toast.error(errMsg(e)),
+    onError: (e) => { const m = errMsg(e); if (needsPin(m)) { if (m === "PIN admin salah") toast.error(m); setPinReason(m === "PIN admin salah" ? pinReason ?? "Butuh PIN admin" : m.replace("Butuh PIN admin: ", "Perlu persetujuan: ")); } else toast.error(m); },
   });
 
   const submitPay = () => {
@@ -542,6 +546,8 @@ export default function Pos() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PinDialog reason={pinReason} pending={pay.isPending} onClose={() => setPinReason(null)}
+        onSubmit={(pin) => lastPayload.current && pay.mutate({ ...lastPayload.current, approval_pin: pin })} />
     </div>
   );
 }

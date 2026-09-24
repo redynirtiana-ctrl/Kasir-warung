@@ -30,6 +30,7 @@ class User(BaseModel):
     role: Role
     active: bool = True
     permissions: list[str] = []  # effective permissions (admin = all)
+    has_pin: bool = False
 
 
 class PermissionInfo(BaseModel):
@@ -148,6 +149,7 @@ class SaleIn(BaseModel):
     customer_id: str | None = None
     due_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     redeem_points: int = Field(default=0, ge=0)
+    approval_pin: str | None = Field(default=None, max_length=12)
 
 
 class SaleItem(BaseModel):
@@ -189,6 +191,12 @@ class Sale(BaseModel):
 
 class VoidIn(BaseModel):
     reason: str = Field(min_length=3, max_length=200)
+    approval_pin: str | None = Field(default=None, max_length=12)
+
+
+class PinIn(BaseModel):
+    pin: str = Field(pattern=r"^\d{4,6}$")
+    current_password: str = Field(min_length=1, max_length=100)
 
 
 # ---------- settings ----------
@@ -208,6 +216,8 @@ class Settings(BaseModel):
     points_per_amount: float = Field(default=10000, gt=0)  # belanja Rp X = 1 poin
     point_value: float = Field(default=100, ge=0)  # 1 poin = Rp Y saat ditukar
     min_redeem_points: int = Field(default=10, ge=0)
+    max_cashier_discount_percent: float = Field(default=10, ge=0, le=100)  # above this a kasir needs an admin PIN
+    expiry_warning_days: int = Field(default=30, ge=1, le=365)
 
 
 # ---------- dashboard ----------
@@ -238,6 +248,7 @@ class Dashboard(BaseModel):
     chart: list[ChartPoint]
     payment_breakdown: dict[str, float]
     due_debts: list[dict] = []
+    expiring: list[dict] = []
 
 
 # ---------- suppliers & purchases ----------
@@ -259,6 +270,7 @@ class PurchaseItemIn(BaseModel):
     product_id: str
     qty: float = Field(gt=0)
     buy_price: float = Field(ge=0)
+    expiry_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class PurchaseIn(BaseModel):

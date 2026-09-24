@@ -230,7 +230,7 @@ def test_kasir_permissions():
         assert k.get("/debts").status_code == 403
         # grant -> takes effect immediately (no re-login)
         set_perms(["give_discount", "void_sale", "view_reports", "process_returns", "receive_debt_payment", "sell_on_credit"])
-        assert k.post("/sales", json={"items": [{"product_id": p["id"], "qty": 1, "discount": 500}], "payment_method": "qris", "amount_paid": 0}).status_code == 200
+        assert k.post("/sales", json={"items": [{"product_id": p["id"], "qty": 1, "discount": 200}], "payment_method": "qris", "amount_paid": 0}).status_code == 200  # 10% = within limit
         assert k.get(f"/reports/daily?date={sale['date']}").status_code == 200
         assert k.get("/debts").status_code == 200
         assert k.post("/returns", json={"type": "sale", "ref_id": sale["id"], "items": [{"product_id": p["id"], "qty": 1}], "reason": "rusak"}).status_code == 200
@@ -240,3 +240,34 @@ def test_kasir_permissions():
         assert k.get("/users").status_code == 403 and k.get("/backups").status_code == 403
     finally:
         set_perms(["give_discount", "sell_on_credit"])
+
+
+def test_admin_pin_discount_limit_expiry():
+    admin = _login("admin", "admin123")
+    assert admin.put("/users/me/pin", json={"pin": "1234", "current_password": "salah"}).status_code == 403
+    assert admin.put("/users/me/pin", json={"pin": "1234", "current_password": "admin123"}).status_code == 200
+    assert [u for u in admin.get("/users").json() if u["username"] == "admin"][0]["has_pin"] is True
+    p = admin.post("/products", json={"sku": f"T-{uuid.uuid4().hex[:6]}", "name": "PIN Test", "buy_price": 5000, "sell_price": 10000, "stock": 30}).json()
+    k = _login("kasir", "kasir123")
+    base = {"items": [{"product_id": p["id"], "qty": 1}], "payment_method": "qris", "amount_paid": 0}
+    # 10% allowed, 20% needs PIN
+    assert k.post("/sales", json={**base, "discount_type": "nominal", "discount_value": 1000}).status_code == 200
+    r = k.post("/sales", json={**base, "discount_type": "percent", "discount_value": 20})
+    assert r.status_code == 403 and r.json()["message"].startswith("Butuh PIN admin")
+    assert k.post("/sales", json={**base, "discount_type": "percent", "discount_value": 20, "approval_pin": "9999"}).json()["message"] == "PIN admin salah"
+    ok = k.post("/sales", json={**base, "discount_type": "percent", "discount_value": 20, "approval_pin": "1234"})
+    assert ok.status_code == 200 and ok.json()["total"] == 8000
+    # admin not limited
+    assert admin.post("/sales", json={**base, "discount_type": "percent", "discount_value": 50}).status_code == 200
+    # void by kasir without permission -> needs PIN
+    sale = ok.json()
+    assert k.post(f"/sales/{sale['id']}/void", json={"reason": "salah input"}).status_code == 403
+    assert k.post(f"/sales/{sale['id']}/void", json={"reason": "salah input", "approval_pin": "1234"}).status_code == 200
+    # expiry batch from purchase shows on dashboard, dismiss removes it
+    sup = admin.post("/suppliers", json={"name": f"Sup {uuid.uuid4().hex[:6]}"}).json()
+    admin.post("/purchases", json={"supplier_id": sup["id"], "invoice_no": "EXP1", "date": sale["date"],
+                                   "items": [{"product_id": p["id"], "qty": 5, "buy_price": 5000, "expiry_date": sale["date"]}]})
+    exp = [x for x in admin.get("/dashboard").json()["expiring"] if x["sku"] == p["sku"]]
+    assert exp and exp[0]["days_left"] == 0
+    assert admin.post(f"/batches/{exp[0]['id']}/dismiss").status_code == 200
+    assert not [x for x in admin.get("/dashboard").json()["expiring"] if x["sku"] == p["sku"]]

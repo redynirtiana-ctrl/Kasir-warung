@@ -2,9 +2,9 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from lib.auth import PERMISSIONS, audit, effective_permissions, hash_password, require_admin
+from lib.auth import PERMISSIONS, audit, effective_permissions, hash_password, require_admin, verify_password
 from lib.db import db
-from models.schemas import User, UserCreate, UserUpdate
+from models.schemas import PinIn, User, UserCreate, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -55,4 +55,14 @@ def _clean(perms: list[str]) -> list[str]:
 
 
 def _out(doc: dict) -> User:
-    return User(**{**doc, "permissions": effective_permissions(doc)})
+    return User(**{**doc, "permissions": effective_permissions(doc), "has_pin": bool(doc.get("pin_hash"))})
+
+
+@router.put("/me/pin")
+async def set_my_pin(body: PinIn, admin: dict = Depends(require_admin)):
+    full = await db.users.find_one({"id": admin["id"]})
+    if not verify_password(body.current_password, full["password_hash"]):
+        raise HTTPException(403, "Password salah")
+    await db.users.update_one({"id": admin["id"]}, {"$set": {"pin_hash": hash_password(body.pin)}})
+    await audit(admin, "pin_set")
+    return {"success": True, "message": "PIN persetujuan disimpan"}

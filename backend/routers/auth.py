@@ -19,7 +19,7 @@ async def login(body: LoginIn, request: Request, response: Response):
     response.set_cookie(COOKIE_NAME, create_token(doc["id"], doc["role"]), httponly=True,
                         samesite="lax", max_age=TOKEN_HOURS * 3600, path="/")
     await audit(doc, "login")
-    return User(**{**doc, "permissions": effective_permissions(doc)})
+    return User(**{**doc, "permissions": effective_permissions(doc), "has_pin": bool(doc.get("pin_hash"))})
 
 
 @router.post("/logout")
@@ -35,7 +35,7 @@ async def logout(response: Response, request: Request):
 
 @router.get("/me", response_model=User)
 async def me(user: dict = Depends(get_current_user)):
-    return User(**{**user, "permissions": effective_permissions(user)})
+    return User(**{**user, "permissions": effective_permissions(user), "has_pin": bool(user.get("pin_set"))})
 
 
 @router.get("/permissions", response_model=list[PermissionInfo])
