@@ -46,3 +46,22 @@ def test_insufficient_stock_rejected():
     r = admin.post("/sales", json={"items": [{"product_id": p["id"], "qty": 5}], "payment_method": "qris", "amount_paid": 0})
     assert r.status_code == 400
     admin.delete(f"/products/{p['id']}")
+
+
+def test_purchase_increases_stock():
+    admin = _login("admin", "admin123")
+    sup = admin.post("/suppliers", json={"name": f"Sup {uuid.uuid4().hex[:6]}"}).json()
+    p = admin.post("/products", json={"sku": f"T-{uuid.uuid4().hex[:6]}", "name": "Beli Test", "buy_price": 1000, "sell_price": 1500, "stock": 2}).json()
+    inv = f"INV-{uuid.uuid4().hex[:6]}"
+    body = {"supplier_id": sup["id"], "invoice_no": inv, "date": "2026-09-24",
+            "items": [{"product_id": p["id"], "qty": 10, "buy_price": 1100}]}
+    r = admin.post("/purchases", json=body)
+    assert r.status_code == 200 and r.json()["total"] == 11000
+    after = admin.get(f"/products/barcode/{p['barcode']}").json()
+    assert after["stock"] == 12 and after["buy_price"] == 1100
+    assert admin.post("/purchases", json=body).status_code == 409  # duplicate invoice
+    hist = admin.get(f"/purchases?supplier_id={sup['id']}").json()
+    assert len(hist) == 1 and hist[0]["invoice_no"] == inv
+    kasir = _login("kasir", "kasir123")
+    assert kasir.get("/purchases").status_code == 403
+    admin.delete(f"/products/{p['id']}")

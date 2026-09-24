@@ -15,7 +15,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 from lib.db import client, ensure_indexes  # noqa: E402
-from routers import auth, users, categories, products, sales, dashboard  # noqa: E402
+from routers import auth, users, categories, products, sales, dashboard, purchases  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("wbc")
@@ -40,7 +40,7 @@ async def root():
 
 # Versioned API: /api/v1/... — add /api/v2 later without breaking v1 clients.
 v1 = APIRouter(prefix="/v1")
-for module in (auth, users, categories, products, sales, dashboard):
+for module in (auth, users, categories, products, sales, dashboard, purchases):
     v1.include_router(module.router)
 api_router.include_router(v1)
 

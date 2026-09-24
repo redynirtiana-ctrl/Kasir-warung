@@ -8,6 +8,8 @@ import Categories from "@/pages/Categories";
 import Sales from "@/pages/Sales";
 import Users from "@/pages/Users";
 import Settings from "@/pages/Settings";
+import Purchases from "@/pages/Purchases";
+import Suppliers from "@/pages/Suppliers";
 
 export default function App() {
   return (
@@ -18,6 +20,8 @@ export default function App() {
         <Route path="/pos" element={<Pos />} />
         <Route path="/products" element={<Products />} />
         <Route path="/categories" element={<Categories />} />
+        <Route path="/purchases" element={<Purchases />} />
+        <Route path="/suppliers" element={<Suppliers />} />
         <Route path="/sales" element={<Sales />} />
         <Route path="/users" element={<Users />} />
         <Route path="/settings" element={<Settings />} />

@@ -37,6 +37,12 @@ Versi saat ini mencetak lewat dialog print browser (CSS `@page` 58/80mm). Atur p
 Scanner USB (HID) mengetik kode + Enter ke kolom scan di halaman Kasir (fokus otomatis, F3 untuk kembali fokus).
 
 ## CHANGELOG
+### 1.1.0 (Phase 4 — sebagian)
+- Modul Supplier: CRUD (nama, kontak, telepon, alamat, catatan), jumlah & total pembelian, riwayat pembelian per supplier
+- Modul Pembelian: supplier, no. invoice (unik per supplier), tanggal, banyak produk (qty, harga beli), total
+- Simpan pembelian → stok otomatis bertambah + stock movement "purchase" + opsi perbarui harga beli (tercatat di histori harga)
+- API: GET/POST/PUT/DELETE /api/v1/suppliers, GET/POST /api/v1/purchases (admin)
+- Belum: retur penjualan & retur pembelian
 ### 1.0.0
 - Login JWT (cookie httpOnly) + bcrypt, role admin/kasir, rate limit login, audit log
 - CRUD kategori, produk, pengguna; histori harga; stock movement & penyesuaian stok

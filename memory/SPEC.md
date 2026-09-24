@@ -19,7 +19,12 @@ users, categories, products (sku unique, barcode unique sparse), sales (invoice_
 - GET/PUT /settings (store name, address, WA, footer, paper 58/80, tax %, invoice prefix, payment methods)
 - users: GET/POST/PUT (admin)
 
+- suppliers (admin): GET (with purchase_count, purchase_total), POST, PUT/{id}, DELETE/{id} (blocked if has purchases)
+- purchases (admin): GET (supplier_id, start, end), POST {supplier_id, invoice_no (unique per supplier, 409), date YYYY-MM-DD, items[{product_id, qty, buy_price}], note, update_buy_price} → stock += qty, movement "purchase", optional buy_price update + price_history
+
 ## Frontend flows
+- /purchases (admin): list + filter supplier, "Catat Pembelian" dialog (supplier, invoice, date, product picker, qty/price, total, update-price checkbox), detail view.
+- /suppliers (admin): table, add/edit/delete, purchase history dialog.
 - /login (demo chips) → admin → `/`, kasir → `/pos`
 - /pos: barcode input (Enter), search (debounced), category chips, cart (qty, per-line Rp discount, trx discount Rp/%), payment dialog (cash w/ change or other methods), receipt dialog + browser thermal print. Multi-cart hold/resume persisted in localStorage. Shortcuts: F1 POS, F2 search, F3 scan, F4 pay, F5 hold, F6 held list, F12 print last receipt.
 - /products: table, stock status badges (STOK MENIPIS / STOK HABIS), add/edit dialog with barcode generate + preview, stock adjustment, multi-select label printing (custom size mm, copies). `?new=<barcode>` opens add-form prefilled.
@@ -29,4 +34,4 @@ users, categories, products (sku unique, barcode unique sparse), sales (invoice_
 7 categories; 10 products (e.g. Beras Premium 5 Kg barcode 8991001000011 Rp75.000 stok 20; Mie Instan 8991001000059 Rp3.500; Telur Ayam stok 4 min 5 = menipis; Teh Celup stok 0 = habis).
 
 ## Not yet built (later phases)
-Purchases/suppliers module, returns module, shifts, expenses, customers & debt, nightly reports/PDF/Excel export, import, backup/restore, ESC/POS print bridge, photo upload (URL field only).
+Returns module (sales & purchase returns), shifts, expenses, customers & debt, nightly reports/PDF/Excel export, import, backup/restore, ESC/POS print bridge, photo upload (URL field only).

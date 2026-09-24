@@ -190,3 +190,55 @@ class Dashboard(BaseModel):
     recent_sales: list[Sale]
     chart: list[ChartPoint]
     payment_breakdown: dict[str, float]
+
+
+# ---------- suppliers & purchases ----------
+class SupplierIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    contact_name: str = ""
+    phone: str = ""
+    address: str = ""
+    note: str = ""
+
+
+class Supplier(SupplierIn):
+    id: str = Field(default_factory=_id)
+    purchase_count: int = 0
+    purchase_total: float = 0
+
+
+class PurchaseItemIn(BaseModel):
+    product_id: str
+    qty: float = Field(gt=0)
+    buy_price: float = Field(ge=0)
+
+
+class PurchaseIn(BaseModel):
+    supplier_id: str
+    invoice_no: str = Field(min_length=1, max_length=60)
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    items: list[PurchaseItemIn] = Field(min_length=1)
+    note: str = ""
+    update_buy_price: bool = True
+
+
+class PurchaseItem(BaseModel):
+    product_id: str
+    name: str
+    unit: str
+    qty: float
+    buy_price: float
+    subtotal: float
+
+
+class Purchase(BaseModel):
+    id: str
+    supplier_id: str
+    supplier_name: str
+    invoice_no: str
+    date: str
+    items: list[PurchaseItem]
+    total: float
+    note: str
+    username: str
+    created_at: datetime

@@ -44,6 +44,10 @@ async def main() -> None:
                 "id": str(uuid.uuid4()), "sku": sku, "barcode": bc, "name": name, "category_id": cat_ids[cat],
                 "category_name": cat, "unit": unit, "buy_price": buy, "sell_price": sell, "stock": stock,
                 "min_stock": mn, "supplier": "", "photo_url": "", "active": True, "created_at": now, "updated_at": now})
+    for name, contact, phone in [("CV Sumber Pangan", "Pak Budi", "0813-1111-2222"), ("Toko Grosir Makmur", "Bu Sri", "0812-3333-4444")]:
+        if not await db.suppliers.find_one({"name": name}):
+            await db.suppliers.insert_one({"id": str(uuid.uuid4()), "name": name, "contact_name": contact,
+                                           "phone": phone, "address": "", "note": ""})
     if not await db.settings.find_one({"key": "store"}):
         from models.schemas import Settings
         await db.settings.insert_one({"key": "store", **Settings().model_dump()})

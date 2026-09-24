@@ -152,3 +152,55 @@ export interface ApiErrorBody {
   message: string;
   error: string;
 }
+
+// ---------- suppliers & purchases ----------
+export interface SupplierIn {
+  name: string;
+  contact_name: string;
+  phone: string;
+  address: string;
+  note: string;
+}
+
+export interface Supplier extends SupplierIn {
+  id: string;
+  purchase_count: number;
+  purchase_total: number;
+}
+
+export interface PurchaseItemIn {
+  product_id: string;
+  qty: number;
+  buy_price: number;
+}
+
+export interface PurchaseIn {
+  supplier_id: string;
+  invoice_no: string;
+  date: string;
+  items: PurchaseItemIn[];
+  note: string;
+  update_buy_price: boolean;
+}
+
+export interface PurchaseItem {
+  product_id: string;
+  name: string;
+  unit: string;
+  qty: number;
+  buy_price: number;
+  subtotal: number;
+}
+
+export interface Purchase {
+  id: string;
+  supplier_id: string;
+  supplier_name: string;
+  invoice_no: string;
+  date: string;
+  items: PurchaseItem[];
+  total: number;
+  note: string;
+  username: string;
+  created_at: string;
+}
