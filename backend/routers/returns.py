@@ -44,7 +44,13 @@ async def create_return(body: ReturnIn, admin: dict = Depends(require_admin)):
             raise HTTPException(400, "Transaksi tidak ditemukan atau sudah void")
         ref_no = ref["invoice_no"]
         # unit refund price = line subtotal / qty (includes per-line discount)
-        lines = {i["product_id"]: (i["qty"], i["subtotal"] / i["qty"], i["name"]) for i in ref["items"]}
+        # aggregate per product in BASE units (multi-satuan lines are converted with their factor)
+        agg: dict[str, list] = {}
+        for i in ref["items"]:
+            a = agg.setdefault(i["product_id"], [0.0, 0.0, i["name"]])
+            a[0] += i["qty"] * i.get("factor", 1)
+            a[1] += i["subtotal"]
+        lines = {pid: (q, sub / q, name) for pid, (q, sub, name) in agg.items()}
     else:
         ref = await db.purchases.find_one({"id": body.ref_id}, {"_id": 0})
         if not ref:

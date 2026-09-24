@@ -37,6 +37,11 @@ Versi saat ini mencetak lewat dialog print browser (CSS `@page` 58/80mm). Atur p
 Scanner USB (HID) mengetik kode + Enter ke kolom scan di halaman Kasir (fokus otomatis, F3 untuk kembali fokus).
 
 ## CHANGELOG
+### 1.6.0
+- Kartu member: setiap pelanggan punya kode `MBR######` (otomatis, pelanggan lama diisi otomatis), cetak kartu ukuran KTP/ATM (85.6×54 mm) ber-barcode; scan kartu di kasir → pelanggan & poin langsung terpilih
+- Multi satuan: produk punya satuan tambahan (mis. 1 dus = 40 pcs) dengan harga & barcode sendiri; stok tetap satuan dasar dan dipotong otomatis (qty × isi); retur penjualan dihitung dalam satuan dasar
+- Laporan per kasir & per kategori (rentang tanggal): omzet, transaksi, item, laba
+- Layar pelanggan: tombol monitor di kasir membuka jendela `/display` (seret ke monitor kedua) — tampil belanjaan, harga promo/grosir, member & poin, total, dan layar "Terima kasih" + kembalian. Sinkron lewat BroadcastChannel di browser yang sama (tanpa internet/server)
 ### 1.5.0
 - Harga grosir bertingkat per produk (beli ≥ N → harga X) & harga promo berjangka (tanggal mulai/selesai). Harga dihitung ulang di server (`backend/lib/pricing.py`, mirror `frontend/src/lib/pricing.ts`); kasir menampilkan label PROMO / GROSIR, struk menandai harganya
 - Export Excel/CSV: produk, penjualan (ikut filter tanggal), pembelian, pelanggan, supplier — `GET /api/v1/export/{entity}.{xlsx|csv}` (admin)

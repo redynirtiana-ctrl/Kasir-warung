@@ -71,9 +71,17 @@ class ProductIn(BaseModel):
     photo_url: str = ""
     active: bool = True
     wholesale_tiers: list["WholesaleTier"] = []
+    units: list["ProductUnit"] = []
     promo_price: float | None = Field(default=None, ge=0)
     promo_start: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     promo_end: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+class ProductUnit(BaseModel):
+    name: str = Field(min_length=1, max_length=20)  # e.g. pak, dus
+    factor: float = Field(gt=1)  # base units per this unit
+    price: float = Field(gt=0)
+    barcode: str | None = Field(default=None, max_length=64)
 
 
 class WholesaleTier(BaseModel):
@@ -119,6 +127,7 @@ class SaleItemIn(BaseModel):
     product_id: str
     qty: float = Field(gt=0)
     discount: float = Field(default=0, ge=0)  # nominal discount per line
+    unit: str | None = None  # alternative unit name; None = base unit
 
 
 class SaleIn(BaseModel):
@@ -143,6 +152,7 @@ class SaleItem(BaseModel):
     subtotal: float
     normal_price: float = 0
     price_type: Literal["normal", "promo", "grosir"] = "normal"
+    factor: float = 1  # base units per sold unit (multi-satuan)
 
 
 class Sale(BaseModel):
@@ -401,6 +411,7 @@ class CustomerIn(BaseModel):
 
 class Customer(CustomerIn):
     id: str = Field(default_factory=_id)
+    member_code: str = ""
     points: int = 0
     debt_remaining: float = 0
     transaction_count: int = 0
@@ -543,3 +554,19 @@ class Opname(BaseModel):
     note: str
     username: str
     created_at: datetime
+
+
+# ---------- breakdown report ----------
+class BreakdownRow(BaseModel):
+    name: str
+    transactions: int = 0
+    qty: float = 0
+    omzet: float = 0
+    profit: float = 0
+
+
+class Breakdown(BaseModel):
+    start: str
+    end: str
+    by_cashier: list[BreakdownRow]
+    by_category: list[BreakdownRow]

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, History, HandCoins, MessageCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, History, HandCoins, MessageCircle, IdCard } from "lucide-react";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import type { Customer, CustomerIn, Debt, Sale, Settings } from "@/lib/types";
 import { errMsg, fmtDateTime, PAYMENT_LABELS, rupiah, todayLocal, waLink } from "@/lib/format";
@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import ExportButtons from "@/components/ExportButtons";
+import { printMemberCards } from "@/lib/print";
 import { cn } from "@/lib/utils";
 
 const EMPTY: CustomerIn = { name: "", whatsapp: "", address: "", note: "" };
@@ -66,6 +67,7 @@ export default function Customers() {
           <p className="text-sm text-muted-foreground">Total piutang berjalan: <b data-testid="debt-total-open">{rupiah(customers.reduce((a, c) => a + c.debt_remaining, 0))}</b></p>
         </div>
         <div className="flex gap-2"><ExportButtons entity="customers" />
+        <Button variant="outline" size="sm" disabled={!customers.length || !settings} onClick={() => settings && printMemberCards(customers, settings)} data-testid="print-all-cards-button"><IdCard /> Cetak semua kartu</Button>
         <Button onClick={() => { setEditing(null); setForm({ ...EMPTY }); }} data-testid="add-customer-button"><Plus /> Tambah Pelanggan</Button></div>
       </div>
       <Tabs defaultValue="customers">
@@ -76,11 +78,12 @@ export default function Customers() {
         <TabsContent value="customers" className="mt-4">
           <div className="rounded-2xl border bg-white shadow-sm">
             <Table>
-              <TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>WhatsApp</TableHead><TableHead>Alamat</TableHead><TableHead className="text-right">Transaksi</TableHead><TableHead className="text-right">Poin</TableHead><TableHead className="text-right">Sisa hutang</TableHead><TableHead /></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>Kode member</TableHead><TableHead>WhatsApp</TableHead><TableHead>Alamat</TableHead><TableHead className="text-right">Transaksi</TableHead><TableHead className="text-right">Poin</TableHead><TableHead className="text-right">Sisa hutang</TableHead><TableHead /></TableRow></TableHeader>
               <TableBody>
                 {customers.map((c) => (
                   <TableRow key={c.id} data-testid={`customer-row-${c.name}`}>
                     <TableCell className="font-semibold">{c.name}{c.note && <div className="text-xs font-normal text-muted-foreground">{c.note}</div>}</TableCell>
+                    <TableCell className="font-mono text-xs" data-testid={`customer-code-${c.name}`}>{c.member_code}</TableCell>
                     <TableCell className="font-mono text-sm">{c.whatsapp || "-"}</TableCell>
                     <TableCell className="max-w-48 truncate">{c.address || "-"}</TableCell>
                     <TableCell className="text-right">{c.transaction_count}</TableCell>
@@ -88,6 +91,7 @@ export default function Customers() {
                     <TableCell className={cn("text-right font-semibold", c.debt_remaining > 0 && "text-amber-700")} data-testid={`customer-debt-${c.name}`}>{rupiah(c.debt_remaining)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
+                        <Button size="icon-sm" variant="ghost" title="Cetak kartu member" onClick={() => settings && printMemberCards([c], settings)} data-testid={`customer-card-${c.name}`}><IdCard /></Button>
                         <Button size="icon-sm" variant="ghost" onClick={() => setHistory(c)} data-testid={`customer-history-${c.name}`}><History /></Button>
                         <Button size="icon-sm" variant="ghost" onClick={() => { setEditing(c); setForm({ name: c.name, whatsapp: c.whatsapp, address: c.address, note: c.note }); }} data-testid={`customer-edit-${c.name}`}><Pencil /></Button>
                         <Button size="icon-sm" variant="ghost" onClick={() => confirm(`Hapus ${c.name}?`) && del.mutate(c.id)} data-testid={`customer-delete-${c.name}`}><Trash2 className="text-rose-600" /></Button>

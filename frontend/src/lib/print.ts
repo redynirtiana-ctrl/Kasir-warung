@@ -85,3 +85,13 @@ export function printLabels(items: { product: Product; copies: number }[], size:
 .lbl svg{max-width:100%;height:auto}.n{font-size:9px;font-weight:bold;text-align:center;white-space:nowrap;overflow:hidden;max-width:100%}.p{font-size:11px;font-weight:bold}`;
   printHtml(labels, css);
 }
+
+/** Member card, credit-card size (85.6 × 54 mm), CODE128 barcode of member_code. */
+export function printMemberCards(customers: { name: string; member_code: string; whatsapp: string }[], settings: Settings): void {
+  const cards = customers.map((c) => `<div class="card"><div class="top"><b>${esc(settings.store_name)}</b><span>KARTU MEMBER</span></div>
+<div class="nm">${esc(c.name)}</div><div class="wa">${esc(c.whatsapp || "")}</div>${barcodeSvg(c.member_code, { height: 34, width: 1.6, fontSize: 12 })}</div>`).join("");
+  printHtml(cards, `@page{size:A4;margin:10mm}body{font-family:Arial,sans-serif;display:flex;flex-wrap:wrap;gap:6mm}
+.card{width:85.6mm;height:54mm;box-sizing:border-box;border:1px solid #15803D;border-radius:4mm;padding:4mm 5mm;background:linear-gradient(135deg,#f0fdf4,#fff7ed);display:flex;flex-direction:column;page-break-inside:avoid}
+.top{display:flex;justify-content:space-between;font-size:10px;color:#166534}.top span{letter-spacing:1px}
+.nm{font-size:16px;font-weight:bold;margin-top:4mm}.wa{font-size:10px;color:#555;margin-bottom:auto}svg{align-self:center;max-width:100%}`);
+}

@@ -36,26 +36,38 @@ async def create_sale(body: SaleIn, user: dict = Depends(get_current_user)):
     if body.payment_method not in settings.payment_methods:
         raise HTTPException(400, "Metode pembayaran tidak aktif")
     # Merge duplicate lines, then load products.
-    merged: dict[str, dict] = {}
+    merged: dict[tuple[str, str | None], dict] = {}
     for it in body.items:
-        m = merged.setdefault(it.product_id, {"qty": 0.0, "discount": 0.0})
+        m = merged.setdefault((it.product_id, it.unit or None), {"qty": 0.0, "discount": 0.0})
         m["qty"] += it.qty
         m["discount"] += it.discount
-    products = {p["id"]: p async for p in db.products.find({"id": {"$in": list(merged)}}, {"_id": 0})}
+    pids = list({pid for pid, _ in merged})
+    products = {p["id"]: p async for p in db.products.find({"id": {"$in": pids}}, {"_id": 0})}
+    need: dict[str, float] = {}
     today = datetime.now(store_tz()).strftime("%Y-%m-%d")
     items = []
-    for pid, m in merged.items():
+    for (pid, unit_name), m in merged.items():
         p = products.get(pid)
         if not p or not p.get("active", True):
             raise HTTPException(400, "Produk tidak ditemukan / nonaktif")
-        if p["stock"] < m["qty"]:
-            raise HTTPException(400, f"Stok {p['name']} tidak cukup (sisa {p['stock']:g})")
-        unit_price, price_type = effective_price(p, m["qty"], today)
+        if unit_name and unit_name != p.get("unit"):
+            u = next((u for u in p.get("units") or [] if u["name"] == unit_name), None)
+            if not u:
+                raise HTTPException(400, f"Satuan {unit_name} tidak ada untuk {p['name']}")
+            factor, unit_price, price_type, normal = u["factor"], u["price"], "normal", u["price"]
+        else:
+            factor, normal = 1.0, p["sell_price"]
+            unit_price, price_type = effective_price(p, m["qty"], today)
+            unit_name = p.get("unit", "pcs")
+        need[pid] = need.get(pid, 0) + m["qty"] * factor
         gross = unit_price * m["qty"]
         disc = min(m["discount"], gross)
-        items.append({"product_id": pid, "name": p["name"], "unit": p.get("unit", "pcs"), "qty": m["qty"],
-                      "price": unit_price, "buy_price": p["buy_price"], "discount": disc,
-                      "subtotal": gross - disc, "normal_price": p["sell_price"], "price_type": price_type})
+        items.append({"product_id": pid, "name": p["name"], "unit": unit_name, "qty": m["qty"],
+                      "price": unit_price, "buy_price": p["buy_price"] * factor, "discount": disc,
+                      "subtotal": gross - disc, "normal_price": normal, "price_type": price_type, "factor": factor})
+    for pid, q in need.items():
+        if products[pid]["stock"] < q:
+            raise HTTPException(400, f"Stok {products[pid]['name']} tidak cukup (sisa {products[pid]['stock']:g})")
     subtotal = sum(i["subtotal"] for i in items)
     discount = subtotal * body.discount_value / 100 if body.discount_type == "percent" else body.discount_value
     discount = round(min(discount, subtotal))
@@ -94,14 +106,15 @@ async def create_sale(body: SaleIn, user: dict = Depends(get_current_user)):
     # Atomic conditional decrement per product; roll back on any failure (Mongo standalone has no txns).
     done: list[tuple[str, float]] = []
     for it in items:
+        base = it["qty"] * it["factor"]
         res = await db.products.find_one_and_update(
-            {"id": it["product_id"], "stock": {"$gte": it["qty"]}}, {"$inc": {"stock": -it["qty"]}},
+            {"id": it["product_id"], "stock": {"$gte": base}}, {"$inc": {"stock": -base}},
             return_document=ReturnDocument.AFTER)
         if not res:
             for pid, q in done:
                 await db.products.update_one({"id": pid}, {"$inc": {"stock": q}})
             raise HTTPException(409, f"Stok {it['name']} berubah, silakan ulangi")
-        done.append((it["product_id"], it["qty"]))
+        done.append((it["product_id"], base))
         it["_after"] = res["stock"]
 
     if redeem:
@@ -117,7 +130,9 @@ async def create_sale(body: SaleIn, user: dict = Depends(get_current_user)):
     invoice = await next_invoice_no(settings.invoice_prefix, date_str)
     for it in items:
         after = it.pop("_after")
-        await record_movement(products[it["product_id"]], "sale", -it["qty"], after + it["qty"], after, user, invoice)
+        base = it["qty"] * it["factor"]
+        await record_movement(products[it["product_id"]], "sale", -base, after + base, after, user,
+                              invoice if it["factor"] == 1 else f"{invoice} ({it['qty']:g} {it['unit']})")
     sale = Sale(id=str(uuid.uuid4()), invoice_no=invoice, items=items, subtotal=subtotal, discount=discount,
                 tax=tax, total=total, payment_method=body.payment_method, amount_paid=paid,
                 change=max(paid - total, 0), cashier_name=user["full_name"], status="completed",
@@ -160,10 +175,11 @@ async def void_sale(id: str, body: VoidIn, admin: dict = Depends(require_admin))
     if not doc:
         raise HTTPException(404, "Transaksi tidak ditemukan atau sudah void")
     for it in doc["items"]:
-        p = await db.products.find_one_and_update({"id": it["product_id"]}, {"$inc": {"stock": it["qty"]}},
+        base = it["qty"] * it.get("factor", 1)
+        p = await db.products.find_one_and_update({"id": it["product_id"]}, {"$inc": {"stock": base}},
                                                   return_document=ReturnDocument.AFTER)
         if p:
-            await record_movement(p, "return", it["qty"], p["stock"] - it["qty"], p["stock"], admin,
+            await record_movement(p, "return", base, p["stock"] - base, p["stock"], admin,
                                   f"Void {doc['invoice_no']}")
     if doc.get("customer_id") and (doc.get("points_earned") or doc.get("points_redeemed")):
         await db.customers.update_one({"id": doc["customer_id"]},

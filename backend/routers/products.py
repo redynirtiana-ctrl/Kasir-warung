@@ -63,7 +63,8 @@ async def list_products(q: str = "", category_id: str = "", active_only: bool = 
 
 @router.get("/products/barcode/{barcode}", response_model=Product)
 async def get_by_barcode(barcode: str, _: dict = Depends(get_current_user)):
-    doc = await db.products.find_one({"barcode": barcode.strip()}, {"_id": 0})
+    bc = barcode.strip()
+    doc = await db.products.find_one({"$or": [{"barcode": bc}, {"units.barcode": bc}]}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Produk dengan barcode tersebut belum terdaftar.")
     return Product(**doc)

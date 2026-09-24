@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ScanBarcode, Search, Trash2, Minus, Plus, PauseCircle, FolderOpen, Printer, CreditCard, X } from "lucide-react";
+import { ScanBarcode, Search, Trash2, Minus, Plus, PauseCircle, FolderOpen, Printer, CreditCard, X, MonitorSmartphone, IdCard } from "lucide-react";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { effectivePrice, promoActive } from "@/lib/pricing";
+import type { DisplayState } from "@/lib/types";
 import type { Category, Customer, PaymentMethod, Product, Sale, SaleIn, Settings } from "@/lib/types";
 import { todayLocal, errMsg, num, PAYMENT_LABELS, rupiah, stockStatus } from "@/lib/format";
 import { printReceipt, receiptHtml } from "@/lib/print";
@@ -15,8 +16,11 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-interface CartItem { product: Product; qty: number; discount: number }
-interface Cart { id: number; items: CartItem[]; discountType: "nominal" | "percent"; discountValue: number }
+interface CartItem { product: Product; qty: number; discount: number; unit?: string | null }
+interface Cart { id: number; items: CartItem[]; discountType: "nominal" | "percent"; discountValue: number; customerId?: string | null }
+const itemKey = (i: { product: Product; unit?: string | null }) => `${i.product.id}:${i.unit ?? ""}`;
+const itemTid = (i: CartItem) => (i.unit ? `${i.product.sku}-${i.unit}` : i.product.sku);
+const altUnit = (i: CartItem) => (i.unit ? i.product.units?.find((u) => u.name === i.unit) : undefined);
 
 const STORAGE = "wbc-carts";
 const newCart = (id: number): Cart => ({ id, items: [], discountType: "nominal", discountValue: 0 });
@@ -32,9 +36,14 @@ function loadCarts(): Cart[] {
 
 const TODAY = todayLocal();
 const unitPrice = (p: Product, qty: number) => effectivePrice(p, qty, TODAY);
+function linePrice(i: CartItem): { price: number; type: string } {
+  const u = altUnit(i);
+  return u ? { price: u.price, type: "normal" } : unitPrice(i.product, i.qty);
+}
+const baseQty = (items: CartItem[], pid: string) => items.filter((i) => i.product.id === pid).reduce((a, i) => a + i.qty * (altUnit(i)?.factor ?? 1), 0);
 
 function calc(cart: Cart, taxPercent: number, extraDiscount = 0) {
-  const subtotal = cart.items.reduce((s, i) => s + Math.max(0, unitPrice(i.product, i.qty).price * i.qty - i.discount), 0);
+  const subtotal = cart.items.reduce((s, i) => s + Math.max(0, linePrice(i).price * i.qty - i.discount), 0);
   const raw = cart.discountType === "percent" ? (subtotal * cart.discountValue) / 100 : cart.discountValue;
   const discount = Math.round(Math.min(raw, subtotal)) + extraDiscount;
   const tax = Math.round(((subtotal - discount) * taxPercent) / 100);
@@ -76,7 +85,8 @@ export default function Pos() {
   }, [search]);
 
   const cart = carts.find((c) => c.id === activeId) ?? carts[0];
-  const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: () => apiGet<Customer[]>("/v1/customers"), enabled: payOpen });
+  const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: () => apiGet<Customer[]>("/v1/customers") });
+  const cartCustomer = customers.find((c) => c.id === cart.customerId);
   const totals = calc(cart, settings?.tax_percent ?? 0);
   const selCustomer = customers.find((c) => c.id === customerId);
   const loyalty = !!settings?.loyalty_enabled && !!selCustomer;
@@ -89,43 +99,85 @@ export default function Pos() {
 
   const updateCart = (fn: (c: Cart) => Cart) => setCarts((cs) => cs.map((c) => (c.id === cart.id ? fn(c) : c)));
 
-  const addToCart = (p: Product) => {
-    const inCart = cart.items.find((i) => i.product.id === p.id)?.qty ?? 0;
-    if (inCart + 1 > p.stock) {
-      toast.error(p.stock <= 0 ? `STOK HABIS: ${p.name}` : `Stok ${p.name} hanya ${num(p.stock)}`);
+  const addToCart = (p: Product, unit: string | null = null) => {
+    const factor = unit ? p.units.find((u) => u.name === unit)?.factor ?? 1 : 1;
+    if (baseQty(cart.items, p.id) + factor > p.stock) {
+      toast.error(p.stock <= 0 ? `STOK HABIS: ${p.name}` : `Stok ${p.name} hanya ${num(p.stock)} ${p.unit}`);
       return;
     }
+    const key = itemKey({ product: p, unit });
     updateCart((c) => {
-      const exists = c.items.some((i) => i.product.id === p.id);
+      const exists = c.items.some((i) => itemKey(i) === key);
       const items = exists
-        ? c.items.map((i) => (i.product.id === p.id ? { ...i, qty: i.qty + 1, product: p } : i))
-        : [...c.items, { product: p, qty: 1, discount: 0 }];
+        ? c.items.map((i) => (itemKey(i) === key ? { ...i, qty: i.qty + 1, product: p } : i))
+        : [...c.items, { product: p, qty: 1, discount: 0, unit }];
       return { ...c, items };
     });
     setFlash((f) => f + 1);
   };
 
-  const setQty = (id: string, qty: number) =>
+  const setQty = (key: string, qty: number) =>
     updateCart((c) => ({
       ...c,
       items: c.items
-        .map((i) => (i.product.id === id ? { ...i, qty: Math.min(Math.max(qty, 0), i.product.stock) } : i))
+        .map((i) => {
+          if (itemKey(i) !== key) return i;
+          const f = altUnit(i)?.factor ?? 1;
+          const others = baseQty(c.items, i.product.id) - i.qty * f;
+          return { ...i, qty: Math.min(Math.max(qty, 0), Math.floor((i.product.stock - others) / f)) };
+        })
         .filter((i) => i.qty > 0),
     }));
+
+  const setUnit = (key: string, unit: string | null) =>
+    updateCart((c) => ({ ...c, items: c.items.map((i) => (itemKey(i) === key ? { ...i, unit, qty: 1 } : i)) }));
+
+  const setCartCustomer = (id: string | null) => updateCart((c) => ({ ...c, customerId: id }));
 
   const handleScan = async () => {
     const code = scan.trim();
     if (!code) return;
     setScan("");
+    if (/^MBR\d{6}$/i.test(code)) {
+      try {
+        const m = await apiGet<Customer>(`/v1/customers/by-code/${code.toUpperCase()}`);
+        setCartCustomer(m.id);
+        qc.invalidateQueries({ queryKey: ["customers"] });
+        toast.success(`Member: ${m.name} · ${num(m.points)} poin`);
+      } catch (e) {
+        toast.error(errMsg(e));
+      }
+      return;
+    }
     const local = products.find((p) => p.barcode === code || p.sku.toLowerCase() === code.toLowerCase());
     if (local) return addToCart(local);
+    const byUnit = products.find((p) => p.units?.some((u) => u.barcode === code));
+    if (byUnit) return addToCart(byUnit, byUnit.units.find((u) => u.barcode === code)!.name);
     try {
-      addToCart(await apiGet<Product>(`/v1/products/barcode/${encodeURIComponent(code)}`));
+      const p = await apiGet<Product>(`/v1/products/barcode/${encodeURIComponent(code)}`);
+      addToCart(p, p.barcode === code ? null : p.units?.find((u) => u.barcode === code)?.name ?? null);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) setNotFound(code);
       else toast.error(errMsg(e));
     }
   };
+
+  // Customer display (second window): mirror cart state over BroadcastChannel — no backend involved.
+  const channel = useMemo(() => ("BroadcastChannel" in window ? new BroadcastChannel("wbc-display") : null), []);
+  const displayState = useMemo<DisplayState>(() => ({
+    store: settings?.store_name ?? "",
+    items: cart.items.map((i) => { const lp = linePrice(i); return { name: i.product.name, qty: i.qty, unit: i.unit ?? i.product.unit, price: lp.price, normal: altUnit(i)?.price ?? i.product.sell_price, type: lp.type, subtotal: lp.price * i.qty - i.discount }; }),
+    subtotal: totals.subtotal, discount: totals.discount, tax: totals.tax, total: totals.total,
+    customer: cartCustomer ? { name: cartCustomer.name, points: cartCustomer.points } : null,
+    thanks: receiptOpen && lastSale ? { total: lastSale.total, paid: lastSale.amount_paid, change: lastSale.change, points_earned: lastSale.points_earned } : null,
+  }), [cart, totals, cartCustomer, settings, receiptOpen, lastSale]);
+  useEffect(() => { channel?.postMessage(displayState); }, [channel, displayState]);
+  useEffect(() => {
+    if (!channel) return;
+    const onMsg = (e: MessageEvent) => { if (e.data === "hello") channel.postMessage(displayState); };
+    channel.addEventListener("message", onMsg);
+    return () => channel.removeEventListener("message", onMsg);
+  }, [channel, displayState]);
 
   const holdCart = () => {
     if (!cart.items.length) return toast.info("Keranjang masih kosong");
@@ -146,7 +198,7 @@ export default function Pos() {
     if (!cart.items.length) return toast.info("Keranjang masih kosong");
     setMethod("cash");
     setPaid("");
-    setCustomerId("");
+    setCustomerId(cart.customerId ?? "");
     setDueDate("");
     setRedeemPts(0);
     setPayOpen(true);
@@ -180,7 +232,7 @@ export default function Pos() {
       redeem_points: redeemPts,
       customer_id: customerId || null,
       due_date: method === "hutang" && dueDate ? dueDate : null,
-      items: cart.items.map((i) => ({ product_id: i.product.id, qty: i.qty, discount: i.discount })),
+      items: cart.items.map((i) => ({ product_id: i.product.id, qty: i.qty, discount: i.discount, unit: i.unit ?? null })),
       discount_type: cart.discountType,
       discount_value: cart.discountValue,
       payment_method: method,
@@ -296,32 +348,52 @@ export default function Pos() {
           <div className="ml-auto flex shrink-0 gap-1">
             <Button size="sm" variant="outline" onClick={holdCart} data-testid="pos-hold-button"><PauseCircle /> Hold F5</Button>
             <Button size="sm" variant="outline" onClick={() => setHeldOpen(true)} data-testid="pos-open-held-button"><FolderOpen /> F6</Button>
+            <Button size="sm" variant="outline" title="Buka layar pelanggan (monitor kedua)" onClick={() => window.open("/display", "wbc-display", "popup,width=1024,height=700")} data-testid="pos-open-display-button"><MonitorSmartphone /></Button>
           </div>
+        </div>
+        <div className="flex items-center gap-2 pb-2 text-sm">
+          {cartCustomer ? (
+            <span className="flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 font-medium text-violet-900" data-testid="pos-cart-customer">
+              <IdCard className="size-4" /> {cartCustomer.name} · {num(cartCustomer.points)} poin
+              <button onClick={() => setCartCustomer(null)} className="text-violet-700 hover:text-violet-950" data-testid="pos-cart-customer-clear"><X className="size-3.5" /></button>
+            </span>
+          ) : (
+            <select value="" onChange={(e) => setCartCustomer(e.target.value || null)} className="h-7 rounded-md border bg-white px-2 text-xs text-muted-foreground" data-testid="pos-cart-customer-select">
+              <option value="">+ Member (atau scan kartu MBR…)</option>
+              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
         </div>
         <div className="min-h-40 flex-1 divide-y overflow-y-auto" data-testid="cart-items">
           {cart.items.map((i) => (
-            <div key={i.product.id} className="py-2.5" data-testid={`cart-item-${i.product.sku}`}>
+            <div key={itemKey(i)} className="py-2.5" data-testid={`cart-item-${itemTid(i)}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold">{i.product.name}</div>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    {(() => { const ep = unitPrice(i.product, i.qty); return (<>
-                      <span data-testid={`cart-item-price-${i.product.sku}`}>{rupiah(ep.price)}</span>
-                      {ep.type !== "normal" && <><span className="line-through">{rupiah(i.product.sell_price)}</span><Badge className={ep.type === "promo" ? "bg-rose-100 text-rose-800" : "bg-sky-100 text-sky-800"} data-testid={`cart-item-pricetype-${i.product.sku}`}>{ep.type === "promo" ? "PROMO" : "GROSIR"}</Badge></>}
+                    {(() => { const ep = linePrice(i); return (<>
+                      <span data-testid={`cart-item-price-${itemTid(i)}`}>{rupiah(ep.price)}</span>
+                      {ep.type !== "normal" && !i.unit && <><span className="line-through">{rupiah(i.product.sell_price)}</span><Badge className={ep.type === "promo" ? "bg-rose-100 text-rose-800" : "bg-sky-100 text-sky-800"} data-testid={`cart-item-pricetype-${itemTid(i)}`}>{ep.type === "promo" ? "PROMO" : "GROSIR"}</Badge></>}
                     </>); })()}
-                    <span>· stok {num(i.product.stock)}</span>
+                    <span>· stok {num(i.product.stock)} {i.product.unit}</span>
+                    {i.product.units?.length > 0 && (
+                      <select value={i.unit ?? ""} onChange={(e) => setUnit(itemKey(i), e.target.value || null)} className="ml-1 h-6 rounded border bg-white px-1 text-xs" data-testid={`cart-unit-${itemTid(i)}`}>
+                        <option value="">{i.product.unit}</option>
+                        {i.product.units.map((u) => <option key={u.name} value={u.name}>{`${u.name} (${num(u.factor)})`}</option>)}
+                      </select>
+                    )}
                   </div>
                 </div>
-                <div className="text-right font-semibold" data-testid={`cart-item-subtotal-${i.product.sku}`}>{rupiah(unitPrice(i.product, i.qty).price * i.qty - i.discount)}</div>
+                <div className="text-right font-semibold" data-testid={`cart-item-subtotal-${itemTid(i)}`}>{rupiah(linePrice(i).price * i.qty - i.discount)}</div>
               </div>
               <div className="mt-1.5 flex items-center gap-2">
-                <Button size="icon-sm" variant="outline" onClick={() => setQty(i.product.id, i.qty - 1)} data-testid={`cart-dec-${i.product.sku}`}><Minus /></Button>
-                <Input value={i.qty} onChange={(e) => setQty(i.product.id, Number(e.target.value) || 0)} className="h-8 w-14 text-center" data-testid={`cart-qty-${i.product.sku}`} />
-                <Button size="icon-sm" variant="outline" onClick={() => addToCart(i.product)} data-testid={`cart-inc-${i.product.sku}`}><Plus /></Button>
+                <Button size="icon-sm" variant="outline" onClick={() => setQty(itemKey(i), i.qty - 1)} data-testid={`cart-dec-${itemTid(i)}`}><Minus /></Button>
+                <Input value={i.qty} onChange={(e) => setQty(itemKey(i), Number(e.target.value) || 0)} className="h-8 w-14 text-center" data-testid={`cart-qty-${itemTid(i)}`} />
+                <Button size="icon-sm" variant="outline" onClick={() => addToCart(i.product, i.unit ?? null)} data-testid={`cart-inc-${itemTid(i)}`}><Plus /></Button>
                 <Input type="number" min={0} placeholder="Diskon Rp" value={i.discount || ""}
-                  onChange={(e) => updateCart((c) => ({ ...c, items: c.items.map((x) => (x.product.id === i.product.id ? { ...x, discount: Math.max(0, Number(e.target.value) || 0) } : x)) }))}
+                  onChange={(e) => updateCart((c) => ({ ...c, items: c.items.map((x) => (itemKey(x) === itemKey(i) ? { ...x, discount: Math.max(0, Number(e.target.value) || 0) } : x)) }))}
                   className="h-8 flex-1 text-orange-600" data-testid={`cart-discount-${i.product.sku}`} />
-                <Button size="icon-sm" variant="ghost" onClick={() => setQty(i.product.id, 0)} data-testid={`cart-remove-${i.product.sku}`}><Trash2 className="text-rose-600" /></Button>
+                <Button size="icon-sm" variant="ghost" onClick={() => setQty(itemKey(i), 0)} data-testid={`cart-remove-${itemTid(i)}`}><Trash2 className="text-rose-600" /></Button>
               </div>
             </div>
           ))}

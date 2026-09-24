@@ -41,6 +41,10 @@ users, categories, products (sku unique, barcode unique sparse), sales (invoice_
 - Stock opname (admin): GET/POST /stock/opname {items[{product_id, counted}], note} → sets stock, movement "opname", Opname{lines, adjusted_count, value_diff}. Frontend /opname keeps counts in localStorage until committed
 - Export (admin): GET /export/{products|sales|purchases|customers|suppliers}.{xlsx|csv}?start&end (sales/purchases date filter)
 - Demo: Mie Instan (MKN-001) grosir ≥10 = 3.200, ≥40 = 3.000; Minyak (SBK-002) promo 16.000 until 2026-10-31
+- Member card: Customer.member_code "MBR"+6 digits (generated on create, backfilled on GET /customers); GET /customers/by-code/{code} (any user, 404 if unknown). POS scan of MBR code sets cart.customerId; Customers page prints cards (lib/print printMemberCards)
+- Multi-unit: Product.units[{name, factor>1, price, barcode?}] (base unit = Product.unit, stock always base). SaleItemIn.unit (null=base); SaleItem.unit=unit name, factor, buy_price = base buy × factor; stock −= qty×factor; void restores qty×factor; sale returns aggregate lines to base units. /products/barcode/{bc} also matches units.barcode. Demo: MKN-001 dus=40 pcs Rp125.000 barcode 8991001000509
+- GET /reports/breakdown?start&end (admin) → by_cashier / by_category rows {name, transactions, qty, omzet, profit} (trx discount spread proportionally)
+- Customer display: public route /display (no auth, no API) listens on BroadcastChannel "wbc-display"; POS posts DisplayState on every cart change and responds to "hello"
 - reports (admin): GET /reports/daily?date, /reports/daily.pdf, /reports/daily.xlsx (file downloads), GET /reports/restock (stock ≤ min grouped by product.supplier, suggested = 2×min − stock)
 
 ## Frontend flows

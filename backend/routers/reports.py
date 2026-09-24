@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from lib.auth import require_admin
 from lib.db import db
-from models.schemas import DailyReport, DailyReportSnapshot, MonthlyDay, MonthlyReport, RestockGroup, RestockItem
+from models.schemas import Breakdown, BreakdownRow, DailyReport, DailyReportSnapshot, MonthlyDay, MonthlyReport, RestockGroup, RestockItem
 from routers.sales import get_settings, store_tz
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -248,3 +248,35 @@ async def monthly(month: str = "", _: dict = Depends(require_admin)):
     tot = lambda f: sum(getattr(r, f) for r in rows)  # noqa: E731
     return MonthlyReport(month=month, days=rows, omzet=tot("omzet"), modal=tot("modal"), profit=tot("profit"),
                          expenses=tot("expenses"), net=tot("net"), transactions=int(tot("transactions")))
+
+
+@router.get("/breakdown", response_model=Breakdown)
+async def breakdown(start: str = "", end: str = "", _: dict = Depends(require_admin)):
+    today = datetime.now(store_tz()).date().isoformat()
+    start, end = _date(start or today[:8] + "01"), _date(end or today)
+    cats = {p["id"]: p.get("category_name") or "Tanpa kategori"
+            async for p in db.products.find({}, {"_id": 0, "id": 1, "category_name": 1})}
+    cashier: dict[str, BreakdownRow] = {}
+    category: dict[str, BreakdownRow] = {}
+    async for s in db.sales.find({"date": {"$gte": start, "$lte": end}, "status": "completed"}, {"_id": 0}):
+        # transaction-level discount is spread proportionally over its lines
+        ratio = (s["subtotal"] - s["discount"]) / s["subtotal"] if s["subtotal"] else 0
+        c = cashier.setdefault(s.get("cashier_name", "-"), BreakdownRow(name=s.get("cashier_name", "-")))
+        c.transactions += 1
+        c.omzet += s["total"]
+        seen = set()
+        for i in s["items"]:
+            net = i["subtotal"] * ratio
+            profit = net - i["buy_price"] * i["qty"]
+            c.qty += i["qty"]
+            c.profit += profit
+            name = cats.get(i["product_id"], "Produk terhapus")
+            g = category.setdefault(name, BreakdownRow(name=name))
+            g.qty += i["qty"]
+            g.omzet += net
+            g.profit += profit
+            if name not in seen:
+                g.transactions += 1
+                seen.add(name)
+    key = lambda r: -r.omzet  # noqa: E731
+    return Breakdown(start=start, end=end, by_cashier=sorted(cashier.values(), key=key), by_category=sorted(category.values(), key=key))

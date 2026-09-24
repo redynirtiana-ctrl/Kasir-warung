@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { FileSpreadsheet, FileText, Printer, ShoppingBasket, MessageCircle, Archive, Moon } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiGet, apiPost } from "@/lib/api";
-import type { DailyReport, DailyReportSnapshot, MonthlyReport, RestockGroup, Settings } from "@/lib/types";
+import type { Breakdown, BreakdownRow, DailyReport, DailyReportSnapshot, MonthlyReport, RestockGroup, Settings } from "@/lib/types";
 import { fmtDateTime, num, PAYMENT_LABELS, rupiah, waLink } from "@/lib/format";
 import { printHtml } from "@/lib/print";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -213,6 +213,44 @@ function MonthlyTab({ settings }: { settings?: Settings }) {
   );
 }
 
+function BreakdownTable({ rows, title, tid, showTrx }: { rows: BreakdownRow[]; title: string; tid: string; showTrx: string }) {
+  const max = Math.max(1, ...rows.map((r) => r.omzet));
+  return (
+    <div className="rounded-2xl border bg-white p-5 shadow-sm">
+      <h3 className="mb-3 font-semibold">{title}</h3>
+      <div className="space-y-3" data-testid={tid}>
+        {rows.map((r, idx) => (
+          <div key={r.name} data-testid={`${tid}-row-${r.name}`}>
+            <div className="flex justify-between text-sm"><span className="font-medium">{idx === 0 && "🏆 "}{r.name}</span><span className="font-semibold">{rupiah(Math.round(r.omzet))}</span></div>
+            <div className="mt-1 h-2 rounded-full bg-muted"><div className="h-2 rounded-full bg-green-600" style={{ width: `${(r.omzet / max) * 100}%` }} /></div>
+            <div className="mt-0.5 text-xs text-muted-foreground">{num(r.transactions)} {showTrx} · {num(Math.round(r.qty))} item · laba {rupiah(Math.round(r.profit))}</div>
+          </div>
+        ))}
+        {rows.length === 0 && <p className="text-sm text-muted-foreground">Belum ada penjualan</p>}
+      </div>
+    </div>
+  );
+}
+
+function BreakdownTab() {
+  const [start, setStart] = useState(todayLocal().slice(0, 8) + "01");
+  const [end, setEnd] = useState(todayLocal());
+  const { data: b } = useQuery({ queryKey: ["reports", "breakdown", start, end], queryFn: () => apiGet<Breakdown>(`/v1/reports/breakdown?start=${start}&end=${end}`) });
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="w-40" data-testid="breakdown-start-input" />
+        <span className="text-muted-foreground">s/d</span>
+        <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="w-40" data-testid="breakdown-end-input" />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <BreakdownTable rows={b?.by_cashier ?? []} title="Penjualan per kasir" tid="breakdown-cashier" showTrx="transaksi" />
+        <BreakdownTable rows={b?.by_category ?? []} title="Penjualan per kategori" tid="breakdown-category" showTrx="transaksi" />
+      </div>
+    </div>
+  );
+}
+
 function ArchiveTab({ settings }: { settings?: Settings }) {
   const qc = useQueryClient();
   const [view, setView] = useState<DailyReportSnapshot | null>(null);
@@ -270,11 +308,13 @@ export default function Reports() {
         <TabsList>
           <TabsTrigger value="daily" data-testid="reports-tab-daily">Laporan Harian</TabsTrigger>
           <TabsTrigger value="monthly" data-testid="reports-tab-monthly">Laba Bulanan</TabsTrigger>
+          <TabsTrigger value="breakdown" data-testid="reports-tab-breakdown">Per Kasir & Kategori</TabsTrigger>
           <TabsTrigger value="restock" data-testid="reports-tab-restock">Saran Belanja</TabsTrigger>
           <TabsTrigger value="archive" data-testid="reports-tab-archive">Arsip Harian</TabsTrigger>
         </TabsList>
         <TabsContent value="daily" className="mt-4"><DailyTab settings={settings} /></TabsContent>
         <TabsContent value="monthly" className="mt-4"><MonthlyTab settings={settings} /></TabsContent>
+        <TabsContent value="breakdown" className="mt-4"><BreakdownTab /></TabsContent>
         <TabsContent value="restock" className="mt-4"><RestockTab settings={settings} /></TabsContent>
         <TabsContent value="archive" className="mt-4"><ArchiveTab settings={settings} /></TabsContent>
       </Tabs>

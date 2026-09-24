@@ -21,7 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 const EMPTY: ProductIn = {
   sku: "", barcode: "", name: "", category_id: null, unit: "pcs", buy_price: 0, sell_price: 0,
   stock: 0, min_stock: 0, supplier: "", photo_url: "", active: true,
-  wholesale_tiers: [], promo_price: null, promo_start: null, promo_end: null,
+  wholesale_tiers: [], units: [], promo_price: null, promo_start: null, promo_end: null,
 };
 
 function StatusBadge({ p }: { p: Product }) {
@@ -197,6 +197,7 @@ export default function Products() {
                 <TableCell className="text-right font-semibold">
                   {rupiah(p.sell_price)}
                   {promoActive(p, todayLocal()) && <div><Badge className="bg-rose-100 text-rose-800" data-testid={`product-promo-${p.sku}`}>Promo {rupiah(p.promo_price as number)}</Badge></div>}
+                  {p.units?.length > 0 && <div className="text-[11px] font-normal text-amber-700">{p.units.map((u) => `${u.name} (${num(u.factor)}) ${rupiah(u.price)}`).join(" · ")}</div>}
                   {p.wholesale_tiers?.length > 0 && <div className="text-[11px] font-normal text-sky-700">Grosir: {p.wholesale_tiers.map((t) => `≥${num(t.min_qty)} ${rupiah(t.price)}`).join(" · ")}</div>}
                 </TableCell>
                 <TableCell className="text-right font-mono" data-testid={`product-stock-${p.sku}`}>{num(p.stock)} {p.unit}</TableCell>
@@ -206,7 +207,7 @@ export default function Products() {
                     <div className="flex justify-end gap-1">
                       <Button size="icon-sm" variant="ghost" title="Barcode" onClick={() => showLabels([p], `Barcode — ${p.name}`)} data-testid={`product-barcode-${p.sku}`}><Barcode /></Button>
                       <Button size="icon-sm" variant="ghost" title="Stok" onClick={() => setAdjust({ product: p, body: { product_id: p.id, type: "stock_in", qty: 0, note: "" } })} data-testid={`product-adjust-${p.sku}`}><PackagePlus /></Button>
-                      <Button size="icon-sm" variant="ghost" title="Edit" onClick={() => { setEditing(p); setForm({ ...p }); }} data-testid={`product-edit-${p.sku}`}><Pencil /></Button>
+                      <Button size="icon-sm" variant="ghost" title="Edit" onClick={() => { setEditing(p); setForm({ ...p, units: p.units ?? [], wholesale_tiers: p.wholesale_tiers ?? [] }); }} data-testid={`product-edit-${p.sku}`}><Pencil /></Button>
                       <Button size="icon-sm" variant="ghost" title="Hapus" onClick={() => confirm(`Hapus ${p.name}?`) && del.mutate(p.id)} data-testid={`product-delete-${p.sku}`}><Trash2 className="text-rose-600" /></Button>
                     </div>
                   </TableCell>
@@ -266,6 +267,24 @@ export default function Products() {
                   </div>
                 ))}
                 {form.wholesale_tiers.length === 0 && <p className="text-xs text-muted-foreground">Belum ada harga grosir.</p>}
+              </div>
+              <div className="col-span-2 space-y-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                <div className="flex items-center justify-between"><Label>Multi satuan (satuan dasar: {form.unit})</Label>
+                  <Button type="button" size="xs" variant="outline" onClick={() => set("units", [...(form.units ?? []), { name: "", factor: 10, price: form.sell_price * 10, barcode: null }])} data-testid="product-add-unit-button"><Plus /> Satuan</Button>
+                </div>
+                {(form.units ?? []).map((u, idx) => {
+                  const upd = (patch: Partial<typeof u>) => set("units", form.units.map((x, j) => (j === idx ? { ...x, ...patch } : x)));
+                  return (
+                    <div key={idx} className="flex flex-wrap items-center gap-2 text-sm">
+                      <Input value={u.name} placeholder="dus / pak" onChange={(e) => upd({ name: e.target.value })} className="h-8 w-24" data-testid={`product-unit-name-${idx}`} />
+                      <span>= </span><Input type="number" min={2} value={u.factor} onChange={(e) => upd({ factor: Number(e.target.value) })} className="h-8 w-20" data-testid={`product-unit-factor-${idx}`} /><span>{form.unit}, Rp</span>
+                      <Input type="number" min={1} value={u.price} onChange={(e) => upd({ price: Number(e.target.value) })} className="h-8 w-28" data-testid={`product-unit-price-${idx}`} />
+                      <Input value={u.barcode ?? ""} placeholder="barcode (opsional)" onChange={(e) => upd({ barcode: e.target.value || null })} className="h-8 w-36 font-mono" data-testid={`product-unit-barcode-${idx}`} />
+                      <Button type="button" size="icon-xs" variant="ghost" onClick={() => set("units", form.units.filter((_, j) => j !== idx))} data-testid={`product-unit-remove-${idx}`}><Trash2 /></Button>
+                    </div>
+                  );
+                })}
+                {!(form.units ?? []).length && <p className="text-xs text-muted-foreground">Contoh: 1 dus = 40 pcs. Stok tetap dihitung dalam satuan dasar.</p>}
               </div>
               <div className="col-span-2 grid grid-cols-3 gap-2 rounded-lg border border-rose-200 bg-rose-50/60 p-3">
                 <div className="col-span-3"><Label>Harga promo berjangka (kosongkan jika tidak ada)</Label></div>

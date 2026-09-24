@@ -181,3 +181,27 @@ def test_pricing_points_opname_export():
         assert admin.get(f"/export/{e}.csv").status_code == 200
     kasir = _login("kasir", "kasir123")
     assert kasir.get("/export/products.csv").status_code == 403
+
+
+def test_units_member_breakdown():
+    admin = _login("admin", "admin123")
+    ubc = f"77{uuid.uuid4().int % 10**10:010d}"
+    p = admin.post("/products", json={"sku": f"T-{uuid.uuid4().hex[:6]}", "name": "Satuan Test", "unit": "pcs", "buy_price": 1000,
+                                      "sell_price": 1500, "stock": 100, "units": [{"name": "dus", "factor": 40, "price": 55000, "barcode": ubc}]}).json()
+    assert admin.get(f"/products/barcode/{ubc}").json()["id"] == p["id"]
+    s = admin.post("/sales", json={"items": [{"product_id": p["id"], "qty": 2, "unit": "dus"}, {"product_id": p["id"], "qty": 3}],
+                                   "payment_method": "qris", "amount_paid": 0}).json()
+    dus = [i for i in s["items"] if i["unit"] == "dus"][0]
+    assert dus["price"] == 55000 and dus["factor"] == 40 and dus["buy_price"] == 40000 and s["total"] == 114500
+    assert admin.get(f"/products/barcode/{p['barcode']}").json()["stock"] == 17  # 100 - 80 - 3
+    assert admin.post("/sales", json={"items": [{"product_id": p["id"], "qty": 1, "unit": "dus"}], "payment_method": "qris", "amount_paid": 0}).status_code == 400
+    # sale return in base units: return 40 pcs -> refund = 40 * (114500/83)
+    r = admin.post("/returns", json={"type": "sale", "ref_id": s["id"], "items": [{"product_id": p["id"], "qty": 40}], "reason": "dus rusak"})
+    assert r.status_code == 200 and admin.get(f"/products/barcode/{p['barcode']}").json()["stock"] == 57
+    # member card
+    c = admin.post("/customers", json={"name": f"Pelanggan {uuid.uuid4().hex[:5]}"}).json()
+    assert c["member_code"].startswith("MBR")
+    assert admin.get(f"/customers/by-code/{c['member_code']}").json()["id"] == c["id"]
+    assert admin.get("/customers/by-code/MBR000000X").status_code == 404
+    b = admin.get(f"/reports/breakdown?start={s['date']}&end={s['date']}").json()
+    assert b["by_cashier"] and b["by_category"]

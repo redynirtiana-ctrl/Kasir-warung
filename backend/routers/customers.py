@@ -13,6 +13,22 @@ router = APIRouter(tags=["customers"])
 
 
 # ---------- customers (kasir may read/create so they can pick at checkout) ----------
+async def new_member_code() -> str:
+    import random
+    while True:
+        code = f"MBR{random.randint(0, 999999):06d}"
+        if not await db.customers.find_one({"member_code": code}):
+            return code
+
+
+@router.get("/customers/by-code/{code}", response_model=Customer)
+async def by_member_code(code: str, _: dict = Depends(get_current_user)):
+    doc = await db.customers.find_one({"member_code": code.strip().upper()}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Kartu member tidak terdaftar")
+    return Customer(**doc)
+
+
 @router.get("/customers", response_model=list[Customer])
 async def list_customers(q: str = "", _: dict = Depends(get_current_user)):
     query = {"name": {"$regex": re.escape(q), "$options": "i"}} if q else {}
@@ -21,12 +37,16 @@ async def list_customers(q: str = "", _: dict = Depends(get_current_user)):
         [{"$match": {"status": "open"}}, {"$group": {"_id": "$customer_id", "r": {"$sum": "$remaining"}}}])}
     trx = {d["_id"]: d["n"] async for d in db.sales.aggregate(
         [{"$match": {"customer_id": {"$ne": None}, "status": "completed"}}, {"$group": {"_id": "$customer_id", "n": {"$sum": 1}}}])}
+    for c in custs:
+        if not c.get("member_code"):
+            c["member_code"] = await new_member_code()
+            await db.customers.update_one({"id": c["id"]}, {"$set": {"member_code": c["member_code"]}})
     return [Customer(**c, debt_remaining=debts.get(c["id"], 0), transaction_count=trx.get(c["id"], 0)) for c in custs]
 
 
 @router.post("/customers", response_model=Customer)
 async def create_customer(body: CustomerIn, user: dict = Depends(get_current_user)):
-    c = Customer(**body.model_dump())
+    c = Customer(**body.model_dump(), member_code=await new_member_code())
     await db.customers.insert_one(c.model_dump(exclude={"debt_remaining", "transaction_count"}))
     await audit(user, "customer_create", c.name)
     return c

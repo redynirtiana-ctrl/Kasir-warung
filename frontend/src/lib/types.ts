@@ -47,9 +47,17 @@ export interface ProductIn {
   photo_url: string;
   active: boolean;
   wholesale_tiers: WholesaleTier[];
+  units: ProductUnit[];
   promo_price: number | null;
   promo_start: string | null;
   promo_end: string | null;
+}
+
+export interface ProductUnit {
+  name: string;
+  factor: number;
+  price: number;
+  barcode: string | null;
 }
 
 export interface WholesaleTier {
@@ -77,6 +85,7 @@ export interface SaleItemIn {
   product_id: string;
   qty: number;
   discount: number;
+  unit?: string | null;
 }
 
 export interface SaleIn {
@@ -101,6 +110,7 @@ export interface SaleItem {
   subtotal: number;
   normal_price: number;
   price_type: "normal" | "promo" | "grosir";
+  factor: number;
 }
 
 export interface Sale {
@@ -361,6 +371,7 @@ export interface CustomerIn {
 
 export interface Customer extends CustomerIn {
   id: string;
+  member_code: string;
   points: number;
   debt_remaining: number;
   transaction_count: number;
@@ -490,4 +501,31 @@ export interface Opname {
   note: string;
   username: string;
   created_at: string;
+}
+
+export interface BreakdownRow {
+  name: string;
+  transactions: number;
+  qty: number;
+  omzet: number;
+  profit: number;
+}
+
+export interface Breakdown {
+  start: string;
+  end: string;
+  by_cashier: BreakdownRow[];
+  by_category: BreakdownRow[];
+}
+
+/** Message sent from the POS window to the customer display (BroadcastChannel "wbc-display"). */
+export interface DisplayState {
+  store: string;
+  items: { name: string; qty: number; unit: string; price: number; normal: number; type: string; subtotal: number }[];
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  customer: { name: string; points: number } | null;
+  thanks: { total: number; paid: number; change: number; points_earned: number } | null;
 }

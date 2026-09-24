@@ -17,6 +17,7 @@ import Customers from "@/pages/Customers";
 import Expenses from "@/pages/Expenses";
 import Backup from "@/pages/Backup";
 import Opname from "@/pages/Opname";
+import CustomerDisplay from "@/pages/CustomerDisplay";
 
 export default function App() {
   return (
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/users" element={<Users />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
+      <Route path="/display" element={<CustomerDisplay />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

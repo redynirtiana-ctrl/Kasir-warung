@@ -18,8 +18,8 @@ function testSale(): Sale {
     amount_paid: 120000, change: 9000, cashier_name: "Test", status: "completed", void_reason: null, customer_id: null, customer_name: null, points_earned: 0, points_redeemed: 0, points_discount: 0,
     date: "", created_at: new Date().toISOString(),
     items: [
-      { product_id: "1", name: "Beras", unit: "karung", qty: 1, price: 75000, buy_price: 0, discount: 0, subtotal: 75000, normal_price: 0, price_type: "normal" },
-      { product_id: "2", name: "Minyak", unit: "pcs", qty: 2, price: 18000, buy_price: 0, discount: 0, subtotal: 36000, normal_price: 0, price_type: "normal" },
+      { product_id: "1", name: "Beras", unit: "karung", qty: 1, price: 75000, buy_price: 0, discount: 0, subtotal: 75000, normal_price: 0, price_type: "normal", factor: 1 },
+      { product_id: "2", name: "Minyak", unit: "pcs", qty: 2, price: 18000, buy_price: 0, discount: 0, subtotal: 36000, normal_price: 0, price_type: "normal", factor: 1 },
     ],
   };
 }
