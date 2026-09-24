@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useOutletContext } from "react-router-dom";
+import { can } from "@/lib/types";
+import type { User } from "@/lib/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, History, HandCoins, MessageCircle, IdCard } from "lucide-react";
@@ -29,7 +32,8 @@ export default function Customers() {
   const [payNote, setPayNote] = useState("");
 
   const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: () => apiGet<Customer[]>("/v1/customers") });
-  const { data: debts = [] } = useQuery({ queryKey: ["debts", status], queryFn: () => apiGet<Debt[]>(`/v1/debts?status=${status}`) });
+  const me = useOutletContext<User>();
+  const { data: debts = [] } = useQuery({ queryKey: ["debts", status], queryFn: () => apiGet<Debt[]>(`/v1/debts?status=${status}`), enabled: can(me, "receive_debt_payment") });
   const { data: sales = [] } = useQuery({ queryKey: ["customers", "sales", history?.id], queryFn: () => apiGet<Sale[]>(`/v1/customers/${history!.id}/sales`), enabled: !!history });
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: () => apiGet<Settings>("/v1/settings") });
   const custById = new Map(customers.map((c) => [c.id, c]));
@@ -93,8 +97,8 @@ export default function Customers() {
                       <div className="flex justify-end gap-1">
                         <Button size="icon-sm" variant="ghost" title="Cetak kartu member" onClick={() => settings && printMemberCards([c], settings)} data-testid={`customer-card-${c.name}`}><IdCard /></Button>
                         <Button size="icon-sm" variant="ghost" onClick={() => setHistory(c)} data-testid={`customer-history-${c.name}`}><History /></Button>
-                        <Button size="icon-sm" variant="ghost" onClick={() => { setEditing(c); setForm({ name: c.name, whatsapp: c.whatsapp, address: c.address, note: c.note }); }} data-testid={`customer-edit-${c.name}`}><Pencil /></Button>
-                        <Button size="icon-sm" variant="ghost" onClick={() => confirm(`Hapus ${c.name}?`) && del.mutate(c.id)} data-testid={`customer-delete-${c.name}`}><Trash2 className="text-rose-600" /></Button>
+                        {me.role === "admin" && <><Button size="icon-sm" variant="ghost" onClick={() => { setEditing(c); setForm({ name: c.name, whatsapp: c.whatsapp, address: c.address, note: c.note }); }} data-testid={`customer-edit-${c.name}`}><Pencil /></Button>
+                        <Button size="icon-sm" variant="ghost" onClick={() => confirm(`Hapus ${c.name}?`) && del.mutate(c.id)} data-testid={`customer-delete-${c.name}`}><Trash2 className="text-rose-600" /></Button></>}
                       </div>
                     </TableCell>
                   </TableRow>

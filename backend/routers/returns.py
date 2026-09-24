@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pymongo import ReturnDocument
 
-from lib.auth import audit, require_admin
+from lib.auth import audit, has_perm, require_perm
 from lib.db import db
 from models.schemas import Return, ReturnIn
 from routers.products import record_movement
@@ -22,7 +22,7 @@ async def _returned_qty(ref_id: str) -> dict[str, float]:
 
 
 @router.get("/returns", response_model=list[Return])
-async def list_returns(type: str = "", ref_id: str = "", _: dict = Depends(require_admin)):
+async def list_returns(type: str = "", ref_id: str = "", _: dict = Depends(require_perm("process_returns"))):
     q: dict = {}
     if type:
         q["type"] = type
@@ -32,12 +32,14 @@ async def list_returns(type: str = "", ref_id: str = "", _: dict = Depends(requi
 
 
 @router.get("/returns/returned/{ref_id}")
-async def returned_qty(ref_id: str, _: dict = Depends(require_admin)) -> dict[str, float]:
+async def returned_qty(ref_id: str, _: dict = Depends(require_perm("process_returns"))) -> dict[str, float]:
     return await _returned_qty(ref_id)
 
 
 @router.post("/returns", response_model=Return)
-async def create_return(body: ReturnIn, admin: dict = Depends(require_admin)):
+async def create_return(body: ReturnIn, admin: dict = Depends(require_perm("process_returns"))):
+    if body.type == "purchase" and admin.get("role") != "admin":
+        raise HTTPException(403, "Retur pembelian hanya untuk Admin")
     if body.type == "sale":
         ref = await db.sales.find_one({"id": body.ref_id}, {"_id": 0})
         if not ref or ref["status"] != "completed":

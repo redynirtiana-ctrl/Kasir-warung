@@ -37,6 +37,10 @@ Versi saat ini mencetak lewat dialog print browser (CSS `@page` 58/80mm). Atur p
 Scanner USB (HID) mengetik kode + Enter ke kolom scan di halaman Kasir (fokus otomatis, F3 untuk kembali fokus).
 
 ## CHANGELOG
+### 1.7.0
+- Hak akses kasir per fitur (halaman Pengguna): beri diskon, jual hutang, void transaksi, proses retur penjualan, terima cicilan hutang & lihat piutang, lihat laporan. Admin/Owner selalu punya semua akses. Default kasir: diskon + hutang
+- Ditegakkan di server (`require_perm` / `has_perm` di `backend/lib/auth.py`), dibaca ulang dari database setiap request sehingga perubahan izin langsung berlaku tanpa login ulang; penolakan dicatat di audit log (`permission_denied`)
+- UI menyesuaikan: menu Laporan/Retur/Pelanggan muncul sesuai izin, kolom diskon & metode Hutang disembunyikan, tombol void hanya untuk yang berizin. Retur pembelian tetap khusus Admin
 ### 1.6.0
 - Kartu member: setiap pelanggan punya kode `MBR######` (otomatis, pelanggan lama diisi otomatis), cetak kartu ukuran KTP/ATM (85.6×54 mm) ber-barcode; scan kartu di kasir → pelanggan & poin langsung terpilih
 - Multi satuan: produk punya satuan tambahan (mis. 1 dus = 40 pcs) dengan harga & barcode sendiri; stok tetap satuan dasar dan dipotong otomatis (qty × isi); retur penjualan dihitung dalam satuan dasar

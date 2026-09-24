@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pymongo import ReturnDocument
 
-from lib.auth import audit, get_current_user, require_admin
+from lib.auth import audit, get_current_user, require_admin, require_perm
 from lib.db import db
 from models.schemas import Customer, CustomerIn, Debt, DebtPaymentIn, Sale
 
@@ -90,7 +90,7 @@ async def create_debt(sale: dict, customer: dict, due_date: str | None) -> None:
 
 
 @router.get("/debts", response_model=list[Debt])
-async def list_debts(status: str = "", customer_id: str = "", _: dict = Depends(require_admin)):
+async def list_debts(status: str = "", customer_id: str = "", _: dict = Depends(require_perm("receive_debt_payment"))):
     q: dict = {}
     if status:
         q["status"] = status
@@ -100,7 +100,7 @@ async def list_debts(status: str = "", customer_id: str = "", _: dict = Depends(
 
 
 @router.post("/debts/{id}/payments", response_model=Debt)
-async def pay_debt(id: str, body: DebtPaymentIn, admin: dict = Depends(require_admin)):
+async def pay_debt(id: str, body: DebtPaymentIn, admin: dict = Depends(require_perm("receive_debt_payment"))):
     d = await db.debts.find_one({"id": id}, {"_id": 0})
     if not d or d["status"] != "open":
         raise HTTPException(404, "Hutang tidak ditemukan atau sudah lunas")

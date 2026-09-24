@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from lib.auth import require_admin
+from lib.auth import require_perm
 from lib.db import db
 from models.schemas import Breakdown, BreakdownRow, DailyReport, DailyReportSnapshot, MonthlyDay, MonthlyReport, RestockGroup, RestockItem
 from routers.sales import get_settings, store_tz
@@ -81,7 +81,7 @@ async def build_daily(date: str) -> DailyReport:
 
 
 @router.get("/daily", response_model=DailyReport)
-async def daily(date: str = "", _: dict = Depends(require_admin)):
+async def daily(date: str = "", _: dict = Depends(require_perm("view_reports"))):
     return await build_daily(_date(date))
 
 
@@ -98,7 +98,7 @@ def _rows(r: DailyReport) -> list[tuple[str, str]]:
 
 
 @router.get("/daily.xlsx")
-async def daily_excel(date: str = "", _: dict = Depends(require_admin)):
+async def daily_excel(date: str = "", _: dict = Depends(require_perm("view_reports"))):
     from openpyxl import Workbook
     from openpyxl.styles import Font
 
@@ -129,7 +129,7 @@ async def daily_excel(date: str = "", _: dict = Depends(require_admin)):
 
 
 @router.get("/daily.pdf")
-async def daily_pdf(date: str = "", _: dict = Depends(require_admin)):
+async def daily_pdf(date: str = "", _: dict = Depends(require_perm("view_reports"))):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet
@@ -159,7 +159,7 @@ async def daily_pdf(date: str = "", _: dict = Depends(require_admin)):
 
 
 @router.get("/restock", response_model=list[RestockGroup])
-async def restock(_: dict = Depends(require_admin)):
+async def restock(_: dict = Depends(require_perm("view_reports"))):
     prods = await db.products.find({"active": True, "$expr": {"$lte": ["$stock", "$min_stock"]}},
                                    {"_id": 0}).sort("name", 1).to_list(2000)
     groups: dict[str, list[RestockItem]] = {}
@@ -181,12 +181,12 @@ async def save_snapshot(date: str, source: str) -> DailyReportSnapshot:
 
 
 @router.get("/archive", response_model=list[DailyReportSnapshot])
-async def archive(_: dict = Depends(require_admin)):
+async def archive(_: dict = Depends(require_perm("view_reports"))):
     return await db.daily_reports.find({}, {"_id": 0}).sort("date", -1).to_list(400)
 
 
 @router.post("/archive/{date}", response_model=DailyReportSnapshot)
-async def snapshot_now(date: str, _: dict = Depends(require_admin)):
+async def snapshot_now(date: str, _: dict = Depends(require_perm("view_reports"))):
     return await save_snapshot(_date(date), "manual")
 
 
@@ -224,7 +224,7 @@ async def cron_daily_report(request: Request):
 
 
 @router.get("/monthly", response_model=MonthlyReport)
-async def monthly(month: str = "", _: dict = Depends(require_admin)):
+async def monthly(month: str = "", _: dict = Depends(require_perm("view_reports"))):
     import calendar
     month = month or datetime.now(store_tz()).strftime("%Y-%m")
     try:
@@ -251,7 +251,7 @@ async def monthly(month: str = "", _: dict = Depends(require_admin)):
 
 
 @router.get("/breakdown", response_model=Breakdown)
-async def breakdown(start: str = "", end: str = "", _: dict = Depends(require_admin)):
+async def breakdown(start: str = "", end: str = "", _: dict = Depends(require_perm("view_reports"))):
     today = datetime.now(store_tz()).date().isoformat()
     start, end = _date(start or today[:8] + "01"), _date(end or today)
     cats = {p["id"]: p.get("category_name") or "Tanpa kategori"

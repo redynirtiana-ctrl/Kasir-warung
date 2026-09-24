@@ -6,6 +6,7 @@ import { ScanBarcode, Search, Trash2, Minus, Plus, PauseCircle, FolderOpen, Prin
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { effectivePrice, promoActive } from "@/lib/pricing";
 import type { DisplayState } from "@/lib/types";
+import { can } from "@/lib/types";
 import type { Category, Customer, PaymentMethod, Product, Sale, SaleIn, Settings } from "@/lib/types";
 import { todayLocal, errMsg, num, PAYMENT_LABELS, rupiah, stockStatus } from "@/lib/format";
 import { printReceipt, receiptHtml } from "@/lib/print";
@@ -278,7 +279,8 @@ export default function Pos() {
   );
 
   const quick = [totals.total, 20000, 50000, 100000].filter((v, i, a) => v >= totals.total && a.indexOf(v) === i);
-  const methods = (settings?.payment_methods ?? ["cash"]) as PaymentMethod[];
+  const canDiscount = can(me, "give_discount");
+  const methods = ((settings?.payment_methods ?? ["cash"]) as PaymentMethod[]).filter((m) => m !== "hutang" || can(me, "sell_on_credit"));
 
   return (
     <div className="grid h-full grid-cols-1 gap-4 p-3 md:p-4 lg:grid-cols-12 lg:overflow-hidden">
@@ -390,9 +392,9 @@ export default function Pos() {
                 <Button size="icon-sm" variant="outline" onClick={() => setQty(itemKey(i), i.qty - 1)} data-testid={`cart-dec-${itemTid(i)}`}><Minus /></Button>
                 <Input value={i.qty} onChange={(e) => setQty(itemKey(i), Number(e.target.value) || 0)} className="h-8 w-14 text-center" data-testid={`cart-qty-${itemTid(i)}`} />
                 <Button size="icon-sm" variant="outline" onClick={() => addToCart(i.product, i.unit ?? null)} data-testid={`cart-inc-${itemTid(i)}`}><Plus /></Button>
-                <Input type="number" min={0} placeholder="Diskon Rp" value={i.discount || ""}
+                {canDiscount ? <Input type="number" min={0} placeholder="Diskon Rp" value={i.discount || ""}
                   onChange={(e) => updateCart((c) => ({ ...c, items: c.items.map((x) => (itemKey(x) === itemKey(i) ? { ...x, discount: Math.max(0, Number(e.target.value) || 0) } : x)) }))}
-                  className="h-8 flex-1 text-orange-600" data-testid={`cart-discount-${i.product.sku}`} />
+                  className="h-8 flex-1 text-orange-600" data-testid={`cart-discount-${itemTid(i)}`} /> : <div className="flex-1" />}
                 <Button size="icon-sm" variant="ghost" onClick={() => setQty(itemKey(i), 0)} data-testid={`cart-remove-${itemTid(i)}`}><Trash2 className="text-rose-600" /></Button>
               </div>
             </div>
@@ -403,7 +405,7 @@ export default function Pos() {
           <div className="flex justify-between"><span>Subtotal</span><span data-testid="cart-subtotal">{rupiah(totals.subtotal)}</span></div>
           <div className="flex items-center justify-between gap-2">
             <span>Diskon transaksi</span>
-            <div className="flex gap-1">
+            <div className={cn("flex gap-1", !canDiscount && "hidden")}>
               <select value={cart.discountType} onChange={(e) => updateCart((c) => ({ ...c, discountType: e.target.value as Cart["discountType"] }))}
                 className="h-8 rounded-md border px-1 text-xs" data-testid="cart-discount-type">
                 <option value="nominal">Rp</option>

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useOutletContext } from "react-router-dom";
+import type { User } from "@/lib/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Undo2, Plus } from "lucide-react";
@@ -18,6 +20,7 @@ interface Line { product_id: string; name: string; orig: number; remaining: numb
 
 export default function Returns() {
   const qc = useQueryClient();
+  const me = useOutletContext<User>();
   const [tab, setTab] = useState<RType>("sale");
   const [open, setOpen] = useState(false);
   const [refId, setRefId] = useState("");
@@ -36,7 +39,11 @@ export default function Returns() {
   const lines: Line[] = (() => {
     if (tab === "sale") {
       const s = sales.find((x) => x.id === refId);
-      return s ? s.items.map((i) => ({ product_id: i.product_id, name: i.name, orig: i.qty, remaining: i.qty - (returned[i.product_id] ?? 0), price: i.subtotal / i.qty })) : [];
+      if (!s) return [];
+      // multi-satuan lines are merged per product in BASE units (matches the server)
+      const agg = new Map<string, { name: string; q: number; sub: number }>();
+      s.items.forEach((i) => { const a = agg.get(i.product_id) ?? { name: i.name, q: 0, sub: 0 }; a.q += i.qty * (i.factor ?? 1); a.sub += i.subtotal; agg.set(i.product_id, a); });
+      return [...agg].map(([pid, a]) => ({ product_id: pid, name: a.name, orig: a.q, remaining: a.q - (returned[pid] ?? 0), price: a.sub / a.q }));
     }
     const p = purchases.find((x) => x.id === refId);
     return p ? p.items.map((i) => ({ product_id: i.product_id, name: i.name, orig: i.qty, remaining: i.qty - (returned[i.product_id] ?? 0), price: i.buy_price })) : [];
@@ -73,7 +80,7 @@ export default function Returns() {
       <Tabs value={tab} onValueChange={(v) => setTab(v as RType)}>
         <TabsList>
           <TabsTrigger value="sale" data-testid="returns-tab-sale">Retur Penjualan</TabsTrigger>
-          <TabsTrigger value="purchase" data-testid="returns-tab-purchase">Retur Pembelian</TabsTrigger>
+          {me.role === "admin" && <TabsTrigger value="purchase" data-testid="returns-tab-purchase">Retur Pembelian</TabsTrigger>}
         </TabsList>
       </Tabs>
       <div className="rounded-2xl border bg-white shadow-sm">

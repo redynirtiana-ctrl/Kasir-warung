@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
-from lib.auth import (COOKIE_NAME, TOKEN_HOURS, audit, check_rate_limit, create_token,
-                      get_current_user, record_failure, verify_password)
+from lib.auth import (COOKIE_NAME, DEFAULT_KASIR_PERMISSIONS, PERMISSIONS, TOKEN_HOURS, audit, check_rate_limit,
+                      create_token, effective_permissions, get_current_user, record_failure, verify_password)
 from lib.db import db
-from models.schemas import LoginIn, User
+from models.schemas import LoginIn, PermissionInfo, User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -19,7 +19,7 @@ async def login(body: LoginIn, request: Request, response: Response):
     response.set_cookie(COOKIE_NAME, create_token(doc["id"], doc["role"]), httponly=True,
                         samesite="lax", max_age=TOKEN_HOURS * 3600, path="/")
     await audit(doc, "login")
-    return User(**doc)
+    return User(**{**doc, "permissions": effective_permissions(doc)})
 
 
 @router.post("/logout")
@@ -35,4 +35,9 @@ async def logout(response: Response, request: Request):
 
 @router.get("/me", response_model=User)
 async def me(user: dict = Depends(get_current_user)):
-    return User(**user)
+    return User(**{**user, "permissions": effective_permissions(user)})
+
+
+@router.get("/permissions", response_model=list[PermissionInfo])
+async def permission_catalog(_: dict = Depends(get_current_user)):
+    return [PermissionInfo(key=k, label=v, default=k in DEFAULT_KASIR_PERMISSIONS) for k, v in PERMISSIONS.items()]

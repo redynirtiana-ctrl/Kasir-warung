@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOutletContext } from "react-router-dom";
+import { can } from "@/lib/types";
 import { toast } from "sonner";
 import { Printer, Ban, Eye } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
@@ -93,7 +94,7 @@ export default function Sales() {
             <div className="max-h-80 overflow-y-auto rounded-lg border border-dashed bg-amber-50 p-3 font-mono text-xs [&_.b]:font-bold [&_.c]:text-center [&_.hr]:my-1 [&_.hr]:border-t [&_.hr]:border-dashed [&_.hr]:border-stone-400 [&_.r]:flex [&_.r]:justify-between"
               data-testid="sale-receipt-preview" dangerouslySetInnerHTML={{ __html: receiptHtml(view, settings) }} />
             {view.status === "void" && <p className="text-sm text-rose-700">Alasan void: {view.void_reason}</p>}
-            {me.role === "admin" && view.status === "completed" && (
+            {can(me, "void_sale") && view.status === "completed" && (
               <div className="space-y-2 rounded-lg border border-rose-200 bg-rose-50 p-3">
                 <Input placeholder="Alasan void (wajib)" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} data-testid="void-reason-input" />
                 <Button variant="destructive" className="w-full" disabled={voidReason.trim().length < 3 || voidM.isPending} onClick={() => voidM.mutate(view)} data-testid="void-submit-button">

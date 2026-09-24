@@ -9,9 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { logout, useMe } from "@/lib/session";
 import { cn } from "@/lib/utils";
-import type { Role } from "@/lib/types";
+import type { Role, Permission, User } from "@/lib/types";
+import { can } from "@/lib/types";
 
-const NAV: { to: string; label: string; icon: typeof Store; roles: Role[]; key?: string }[] = [
+const NAV: { to: string; label: string; icon: typeof Store; roles: Role[]; key?: string; perm?: Permission }[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "kasir"] },
   { to: "/pos", label: "Kasir", icon: ShoppingCart, roles: ["admin", "kasir"], key: "F1" },
   { to: "/products", label: "Produk & Stok", icon: Package, roles: ["admin", "kasir"] },
@@ -19,10 +20,10 @@ const NAV: { to: string; label: string; icon: typeof Store; roles: Role[]; key?:
   { to: "/opname", label: "Stok Opname", icon: ClipboardCheck, roles: ["admin"] },
   { to: "/purchases", label: "Pembelian", icon: PackagePlus, roles: ["admin"] },
   { to: "/suppliers", label: "Supplier", icon: Truck, roles: ["admin"] },
-  { to: "/returns", label: "Retur", icon: Undo2, roles: ["admin"] },
-  { to: "/customers", label: "Pelanggan & Hutang", icon: Contact, roles: ["admin"] },
+  { to: "/returns", label: "Retur", icon: Undo2, roles: ["admin"], perm: "process_returns" },
+  { to: "/customers", label: "Pelanggan & Hutang", icon: Contact, roles: ["admin"], perm: "receive_debt_payment" },
   { to: "/expenses", label: "Pengeluaran", icon: Wallet, roles: ["admin"] },
-  { to: "/reports", label: "Laporan", icon: BarChart3, roles: ["admin"] },
+  { to: "/reports", label: "Laporan", icon: BarChart3, roles: ["admin"], perm: "view_reports" },
   { to: "/shifts", label: "Shift", icon: Clock, roles: ["admin", "kasir"] },
   { to: "/sales", label: "Penjualan", icon: Receipt, roles: ["admin", "kasir"] },
   { to: "/users", label: "Pengguna", icon: Users, roles: ["admin"] },
@@ -30,10 +31,10 @@ const NAV: { to: string; label: string; icon: typeof Store; roles: Role[]; key?:
   { to: "/settings", label: "Pengaturan", icon: SettingsIcon, roles: ["admin"] },
 ];
 
-function SideNav({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {
+function SideNav({ me, onNavigate }: { me: User; onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-1 px-3">
-      {NAV.filter((n) => n.roles.includes(role)).map((n) => (
+      {NAV.filter((n) => n.roles.includes(me.role) || (n.perm && can(me, n.perm))).map((n) => (
         <NavLink
           key={n.to}
           to={n.to}
@@ -110,14 +111,14 @@ export default function AppLayout() {
     <div className="flex h-screen overflow-hidden bg-background">
       <aside className="hidden w-60 shrink-0 flex-col bg-sidebar lg:flex">
         {brand}
-        <SideNav role={me.role} />
+        <SideNav me={me} />
         {userBox}
       </aside>
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="left" className="flex w-64 flex-col bg-sidebar p-0 text-white">
           <SheetTitle className="sr-only">Menu</SheetTitle>
           {brand}
-          <SideNav role={me.role} onNavigate={() => setOpen(false)} />
+          <SideNav me={me} onNavigate={() => setOpen(false)} />
           {userBox}
         </SheetContent>
       </Sheet>

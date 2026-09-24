@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException
 from pymongo import ReturnDocument
 
-from lib.auth import audit, get_current_user, require_admin
+from lib.auth import audit, get_current_user, has_perm, require_admin, require_perm
 from lib.db import db
 from lib.pricing import effective_price
 from models.schemas import Sale, SaleIn, Settings, VoidIn
@@ -32,6 +32,12 @@ async def next_invoice_no(prefix: str, date_str: str) -> str:
 
 @router.post("/sales", response_model=Sale)
 async def create_sale(body: SaleIn, user: dict = Depends(get_current_user)):
+    if (body.discount_value > 0 or any(i.discount > 0 for i in body.items)) and not has_perm(user, "give_discount"):
+        await audit(user, "permission_denied", "give_discount")
+        raise HTTPException(403, "Tidak punya izin memberi diskon")
+    if body.payment_method == "hutang" and not has_perm(user, "sell_on_credit"):
+        await audit(user, "permission_denied", "sell_on_credit")
+        raise HTTPException(403, "Tidak punya izin transaksi hutang")
     settings = await get_settings()
     if body.payment_method not in settings.payment_methods:
         raise HTTPException(400, "Metode pembayaran tidak aktif")
@@ -166,7 +172,7 @@ async def get_sale(id: str, _: dict = Depends(get_current_user)):
 
 
 @router.post("/sales/{id}/void", response_model=Sale)
-async def void_sale(id: str, body: VoidIn, admin: dict = Depends(require_admin)):
+async def void_sale(id: str, body: VoidIn, admin: dict = Depends(require_perm("void_sale"))):
     doc = await db.sales.find_one_and_update({"id": id, "status": "completed"},
                                              {"$set": {"status": "void", "void_reason": body.reason,
                                                        "voided_by": admin["username"],

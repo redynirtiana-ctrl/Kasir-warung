@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from lib.auth import audit, hash_password, require_admin
+from lib.auth import PERMISSIONS, audit, effective_permissions, hash_password, require_admin
 from lib.db import db
 from models.schemas import User, UserCreate, UserUpdate
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get("", response_model=list[User])
 async def list_users(_: dict = Depends(require_admin)):
-    return await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("username", 1).to_list(500)
+    return [_out(u) for u in await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("username", 1).to_list(500)]
 
 
 @router.post("", response_model=User)
@@ -21,9 +21,11 @@ async def create_user(body: UserCreate, admin: dict = Depends(require_admin)):
         raise HTTPException(409, "Username sudah dipakai")
     doc = {"id": str(uuid.uuid4()), "username": username, "full_name": body.full_name,
            "role": body.role, "active": True, "password_hash": hash_password(body.password)}
+    if body.permissions is not None:
+        doc["permissions"] = _clean(body.permissions)
     await db.users.insert_one(doc)
     await audit(admin, "user_create", username)
-    return User(**doc)
+    return _out(doc)
 
 
 @router.put("/{id}", response_model=User)
@@ -31,6 +33,8 @@ async def update_user(id: str, body: UserUpdate, admin: dict = Depends(require_a
     if id == admin["id"] and (body.role != "admin" or not body.active):
         raise HTTPException(400, "Tidak bisa menurunkan role / menonaktifkan akun sendiri")
     update = {"full_name": body.full_name, "role": body.role, "active": body.active}
+    if body.permissions is not None:
+        update["permissions"] = _clean(body.permissions)
     if body.password:
         if len(body.password) < 6:
             raise HTTPException(422, "Password minimal 6 karakter")
@@ -39,5 +43,16 @@ async def update_user(id: str, body: UserUpdate, admin: dict = Depends(require_a
                                              projection={"_id": 0, "password_hash": 0}, return_document=True)
     if not doc:
         raise HTTPException(404, "Pengguna tidak ditemukan")
-    await audit(admin, "user_update", doc["username"])
-    return User(**doc)
+    await audit(admin, "user_update", f"{doc['username']} izin={','.join(effective_permissions(doc))}")
+    return _out(doc)
+
+
+def _clean(perms: list[str]) -> list[str]:
+    unknown = [p for p in perms if p not in PERMISSIONS]
+    if unknown:
+        raise HTTPException(422, f"Izin tidak dikenal: {', '.join(unknown)}")
+    return sorted(set(perms))
+
+
+def _out(doc: dict) -> User:
+    return User(**{**doc, "permissions": effective_permissions(doc)})

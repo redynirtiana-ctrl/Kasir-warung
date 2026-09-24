@@ -205,3 +205,38 @@ def test_units_member_breakdown():
     assert admin.get("/customers/by-code/MBR000000X").status_code == 404
     b = admin.get(f"/reports/breakdown?start={s['date']}&end={s['date']}").json()
     assert b["by_cashier"] and b["by_category"]
+
+
+def test_kasir_permissions():
+    admin = _login("admin", "admin123")
+    kasir_id = [u for u in admin.get("/users").json() if u["username"] == "kasir"][0]["id"]
+    def set_perms(perms):
+        r = admin.put(f"/users/{kasir_id}", json={"full_name": "Kasir Toko", "role": "kasir", "active": True, "permissions": perms})
+        assert r.status_code == 200, r.text
+        return r.json()
+    assert admin.put(f"/users/{kasir_id}", json={"full_name": "Kasir Toko", "role": "kasir", "active": True, "permissions": ["hack"]}).status_code == 422
+    p = admin.post("/products", json={"sku": f"T-{uuid.uuid4().hex[:6]}", "name": "Izin Test", "buy_price": 1000, "sell_price": 2000, "stock": 20}).json()
+    c = admin.post("/customers", json={"name": f"Pelanggan {uuid.uuid4().hex[:5]}"}).json()
+    try:
+        set_perms([])
+        k = _login("kasir", "kasir123")
+        assert k.get("/auth/me").json()["permissions"] == []
+        assert k.post("/sales", json={"items": [{"product_id": p["id"], "qty": 1, "discount": 500}], "payment_method": "qris", "amount_paid": 0}).status_code == 403
+        assert k.post("/sales", json={"items": [{"product_id": p["id"], "qty": 1}], "payment_method": "hutang", "amount_paid": 0, "customer_id": c["id"]}).status_code == 403
+        sale = k.post("/sales", json={"items": [{"product_id": p["id"], "qty": 1}], "payment_method": "qris", "amount_paid": 0}).json()
+        assert k.post(f"/sales/{sale['id']}/void", json={"reason": "salah input"}).status_code == 403
+        assert k.get(f"/reports/daily?date={sale['date']}").status_code == 403
+        assert k.post("/returns", json={"type": "sale", "ref_id": sale["id"], "items": [{"product_id": p["id"], "qty": 1}], "reason": "rusak"}).status_code == 403
+        assert k.get("/debts").status_code == 403
+        # grant -> takes effect immediately (no re-login)
+        set_perms(["give_discount", "void_sale", "view_reports", "process_returns", "receive_debt_payment", "sell_on_credit"])
+        assert k.post("/sales", json={"items": [{"product_id": p["id"], "qty": 1, "discount": 500}], "payment_method": "qris", "amount_paid": 0}).status_code == 200
+        assert k.get(f"/reports/daily?date={sale['date']}").status_code == 200
+        assert k.get("/debts").status_code == 200
+        assert k.post("/returns", json={"type": "sale", "ref_id": sale["id"], "items": [{"product_id": p["id"], "qty": 1}], "reason": "rusak"}).status_code == 200
+        s2 = k.post("/sales", json={"items": [{"product_id": p["id"], "qty": 1}], "payment_method": "qris", "amount_paid": 0}).json()
+        assert k.post(f"/sales/{s2['id']}/void", json={"reason": "salah input"}).status_code == 200
+        # purchase returns stay admin-only; admin-only areas unaffected
+        assert k.get("/users").status_code == 403 and k.get("/backups").status_code == 403
+    finally:
+        set_perms(["give_discount", "sell_on_credit"])

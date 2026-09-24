@@ -7,13 +7,26 @@ export interface User {
   full_name: string;
   role: Role;
   active: boolean;
+  permissions: Permission[];
 }
+
+export type Permission = "give_discount" | "sell_on_credit" | "void_sale" | "process_returns" | "receive_debt_payment" | "view_reports";
+
+export interface PermissionInfo {
+  key: Permission;
+  label: string;
+  default: boolean;
+}
+
+/** Admin always passes; kasir needs the permission (server enforces the same rule). */
+export const can = (u: User | undefined | null, p: Permission) => !!u && (u.role === "admin" || u.permissions?.includes(p));
 
 export interface UserCreate {
   username: string;
   full_name: string;
   role: Role;
   password: string;
+  permissions?: Permission[] | null;
 }
 
 export interface UserUpdate {

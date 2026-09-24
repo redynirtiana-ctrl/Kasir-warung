@@ -29,6 +29,13 @@ class User(BaseModel):
     full_name: str
     role: Role
     active: bool = True
+    permissions: list[str] = []  # effective permissions (admin = all)
+
+
+class PermissionInfo(BaseModel):
+    key: str
+    label: str
+    default: bool
 
 
 class UserCreate(BaseModel):
@@ -36,6 +43,7 @@ class UserCreate(BaseModel):
     full_name: str = Field(min_length=1, max_length=100)
     role: Role
     password: str = Field(min_length=6, max_length=100)
+    permissions: list[str] | None = None
 
 
 class UserUpdate(BaseModel):
@@ -43,6 +51,7 @@ class UserUpdate(BaseModel):
     role: Role
     active: bool
     password: str | None = Field(default=None, max_length=100)
+    permissions: list[str] | None = None
 
 
 # ---------- categories ----------
