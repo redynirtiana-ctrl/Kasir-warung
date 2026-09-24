@@ -1,0 +1,28 @@
+import { Routes, Route, Navigate } from "react-router-dom";
+import AppLayout from "@/components/AppLayout";
+import Login from "@/pages/Login";
+import Dashboard from "@/pages/Dashboard";
+import Pos from "@/pages/Pos";
+import Products from "@/pages/Products";
+import Categories from "@/pages/Categories";
+import Sales from "@/pages/Sales";
+import Users from "@/pages/Users";
+import Settings from "@/pages/Settings";
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/pos" element={<Pos />} />
+        <Route path="/products" element={<Products />} />
+        <Route path="/categories" element={<Categories />} />
+        <Route path="/sales" element={<Sales />} />
+        <Route path="/users" element={<Users />} />
+        <Route path="/settings" element={<Settings />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}

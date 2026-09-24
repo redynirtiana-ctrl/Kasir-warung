@@ -1,0 +1,226 @@
+{
+  "typography": {
+    "fonts": {
+      "heading": "Outfit Variable, sans-serif",
+      "body": "Plus Jakarta Sans Variable, sans-serif",
+      "mono": "JetBrains Mono Variable, monospace"
+    },
+    "font_imports": [
+      "@import \"@fontsource-variable/outfit\";",
+      "@import \"@fontsource-variable/plus-jakarta-sans\";",
+      "@import \"@fontsource-variable/jetbrains-mono\";"
+    ],
+    "scale_px": {
+      "display": 48,
+      "h1": 36,
+      "h2": 28,
+      "h3": 20,
+      "body": 16,
+      "caption": 14
+    },
+    "weights": {
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    }
+  },
+  "colors": {
+    "theme": "light",
+    "palette_name": "Warung Hijau Hangat & Segar Indonesia",
+    "accent": "#15803D",
+    "on_accent": "#FFFFFF",
+    "surfaces": [
+      {
+        "name": "page",
+        "kind": "solid",
+        "bg": "#F8FAFC",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#475569",
+        "roles": {
+          "link": "#15803D",
+          "error": "#B91C1C",
+          "success": "#15803D",
+          "warning": "#B45309"
+        }
+      },
+      {
+        "name": "panel",
+        "kind": "solid",
+        "bg": "#FFFFFF",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "border": "#E2E8F0",
+          "hover": "#F1F5F9",
+          "active": "#E2E8F0"
+        }
+      },
+      {
+        "name": "sidebar",
+        "kind": "solid",
+        "bg": "#0F291E",
+        "on_bg": "#F1F5F9",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "active_tab": "#166534",
+          "active_tab_text": "#FFFFFF",
+          "badge": "#D97706"
+        }
+      },
+      {
+        "name": "pos_cart_panel",
+        "kind": "solid",
+        "bg": "#FFFFFF",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "total_badge_bg": "#DCFCE7",
+          "total_badge_text": "#14532D",
+          "discount_text": "#EA580C"
+        }
+      },
+      {
+        "name": "receipt_paper",
+        "kind": "solid",
+        "bg": "#FFFBEB",
+        "on_bg": "#1C1917",
+        "on_bg_muted": "#78716C",
+        "roles": {
+          "dashed_border": "#D6D3D1",
+          "store_header": "#0F172A"
+        }
+      },
+      {
+        "name": "stat_card_warm",
+        "kind": "solid",
+        "bg": "#FEF3C7",
+        "on_bg": "#78350F",
+        "on_bg_muted": "#92400E"
+      },
+      {
+        "name": "stat_card_green",
+        "kind": "solid",
+        "bg": "#DCFCE7",
+        "on_bg": "#14532D",
+        "on_bg_muted": "#166534"
+      },
+      {
+        "name": "stat_card_rose",
+        "kind": "solid",
+        "bg": "#FFE4E6",
+        "on_bg": "#881337",
+        "on_bg_muted": "#9F1239"
+      }
+    ]
+  },
+  "entry_surfaces": {
+    "/login": "split branded login — warm warung heritage graphic and value panel left, crisp credential form with demo quick-login chips right",
+    "/": "dashboard overview — KPI summary badges top, daily revenue chart & low-stock alerts center, recent transactions list bottom",
+    "/pos": "high-speed dual-pane cashier layout — barcode scanner + category filter chips + product tile grid left, active cart + instant discount + payment keypad & modal right",
+    "/products": "inventory master data — action bar with auto-barcode generator & label print button top, filterable sortable product table with stock status badges below",
+    "/categories": "category management — quick add category modal top, grid cards of sembako classifications with product count counters",
+    "/sales": "sales ledger — date range filter, summary chips, transaction history table with instant thermal receipt reprint dialog",
+    "/users": "user role management — cashier and admin account listing, permission badges, add/edit user drawer"
+  },
+  "layouts_and_navigation": {
+    "navigation": {
+      "type": "collapsible_sidebar",
+      "brand": {
+        "title": "WARUNG BU CUCUN",
+        "subtitle": "Sistem Kasir & Toko Sembako",
+        "badge": "POS v1.0"
+      },
+      "items": [
+        { "name": "Kasir (POS)", "path": "/pos", "icon": "ShoppingCart", "shortcut": "F1", "role": "all" },
+        { "name": "Dashboard", "path": "/", "icon": "LayoutDashboard", "shortcut": "F2", "role": "all" },
+        { "name": "Produk & Stok", "path": "/products", "icon": "Package", "shortcut": "F3", "role": "all" },
+        { "name": "Kategori Sembako", "path": "/categories", "icon": "Tag", "shortcut": "F4", "role": "admin" },
+        { "name": "Riwayat Transaksi", "path": "/sales", "icon": "Receipt", "shortcut": "F5", "role": "all" },
+        { "name": "Kelola Pengguna", "path": "/users", "icon": "Users", "shortcut": "F6", "role": "admin" }
+      ]
+    },
+    "pos_screen_grid": {
+      "container": "grid grid-cols-1 lg:grid-cols-12 gap-4 h-[calc(100vh-4rem)] overflow-hidden",
+      "left_catalog": "lg:col-span-7 xl:col-span-8 flex flex-col h-full overflow-hidden bg-white rounded-xl border border-slate-200 p-4",
+      "right_cart": "lg:col-span-5 xl:col-span-4 flex flex-col h-full bg-white rounded-xl border border-slate-200 shadow-sm p-4"
+    }
+  },
+  "motion_and_interactions": {
+    "page_transitions": "fade and slight slide (opacity 0 to 1, y: 6 to 0, duration: 0.15s)",
+    "product_tile_click": "active:scale-95 transition-transform duration-75",
+    "cart_item_update": "highlight pulse on quantity change (bg-emerald-50 transition-colors duration-300)",
+    "barcode_scan_flash": "border-emerald-500 ring-2 ring-emerald-200 transition-all duration-150"
+  },
+  "accessibility": {
+    "contrast_standard": "WCAG AA (minimum 4.5:1 on all text tokens)",
+    "focus_rings": "focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2",
+    "keyboard_shortcuts": {
+      "F1": "Fokus ke Barcode Scanner / Pindah ke POS",
+      "F2": "Tahan Transaksi (Hold Bill)",
+      "F3": "Buka Daftar Transaksi Tertahan (Resume Bill)",
+      "F4": "Buka Modal Pembayaran (Bayar Cepat)",
+      "F8": "Beri Diskon Nota / Item",
+      "F9": "Cetak Ulang Struk Terakhir",
+      "Esc": "Tutup Dialog / Batal"
+    }
+  },
+  "thermal_receipt_spec": {
+    "paper_widths": ["58mm", "80mm"],
+    "font_family": "JetBrains Mono, monospace",
+    "print_css_class": "@media print { body * { visibility: hidden; } #thermal-receipt, #thermal-receipt * { visibility: visible; } #thermal-receipt { position: absolute; left: 0; top: 0; width: 100%; } }",
+    "elements": [
+      "Store Header: WARUNG BU CUCUN",
+      "Store Address & Telp: Jl. Raya Pasar No. 12, Telp: 0812-3456-7890",
+      "Transaction Meta: No Nota, Tanggal/Waktu, Kasir",
+      "Dashed separator",
+      "Item Rows: Nama Produk, Qty x Harga Satuan, Subtotal",
+      "Dashed separator",
+      "Totals: Subtotal, Diskon, TOTAL AKHIR",
+      "Payment: Metode Bayar (Tunai/QRIS/Debit/Transfer), Bayar, Kembali",
+      "Dashed separator",
+      "Barcode Nota / QRIS Code",
+      "Footer: 'Terima Kasih Atas Kunjungan Anda! Barang yang dibeli tidak dapat ditukar.'"
+    ]
+  },
+  "barcode_generator_spec": {
+    "library": "jsbarcode (or SVG CODE128 renderer in standard pure JS / SVG canvas)",
+    "formats": ["CODE128", "EAN13"],
+    "label_sizes": ["30mm x 20mm (Kecil)", "40mm x 30mm (Standar)", "50mm x 30mm (Besar)"],
+    "label_fields": ["Nama Warung: WARUNG BU CUCUN", "Nama Produk", "SKU & Barcode SVG", "Harga Jual (Rp)"]
+  },
+  "instructions_to_main_agent": {
+    "core_features_to_implement": [
+      "1. Login authentication (Admin: admin / admin123, Kasir: kasir / kasir123) with role switching and token/session handling.",
+      "2. Dashboard with interactive charts (Omset Hari Ini, Jumlah Transaksi, Total Produk, Peringatan Stok Menipis & Habis, Grafik Penjualan 7 Hari Terakhir, Transaksi Terkini).",
+      "3. POS Kasir screen: Barcode input autofocus, real-time live search, Sembako category chips (Beras, Minyak, Telur, Gula, Bumbu, Sabun/Deterjen, Minuman, Rokok/Snack), interactive product card grid.",
+      "4. Real-time POS Cart: Qty increment/decrement, direct qty input, custom item discount (nominal/percent), transaction discount, delete item, clear cart.",
+      "5. Hold & Resume Transaction (Tahan Transaksi): Support parking multiple pending customer carts with custom label/timestamp and resuming with 1-click.",
+      "6. Payment Modal (Multi-metode): Tunai with quick cash buttons (Pas, Rp10.000, Rp20.000, Rp50.000, Rp100.000, Rp200.000), QRIS with generated simulated QR preview, Transfer Bank, Debit/Kredit, E-Wallet (GoPay, OVO, Dana, ShopeePay), dynamic kembalian calculation.",
+      "7. Thermal Receipt Modal + Browser Native Print: Switchable 58mm & 80mm preview with realistic dot-matrix receipt styling and direct window.print() support.",
+      "8. Product Management (CRUD): SKU, barcode, nama produk, kategori, satuan (kg, pcs, liter, renteng, dus, pack), harga beli, harga jual, stok, minimal stok, status aktif. Auto-generate barcode CODE128.",
+      "9. Barcode Label Print Dialog: Select products, quantity of labels to print, label size, and print preview.",
+      "10. Categories Management (CRUD): Icon picker, category color, product counter.",
+      "11. Sales History & Reports: Filter by date range, payment method, cashier; detail breakdown with itemized modal and 'Cetak Struk Ulang' (reprint receipt).",
+      "12. User Management: Add/edit cashier and admin users with PIN/password and active status.",
+      "13. Global Keyboard Shortcuts (F1-F9, Enter, Esc) with floating shortcut guide cheat sheet modal."
+    ],
+    "sample_data_sembako": [
+      { "sku": "SBK-001", "barcode": "8992753210011", "name": "Beras Rojolele Super 5kg", "category": "Beras & Biji", "unit": "karung", "buy_price": 68000, "sell_price": 75000, "stock": 24, "min_stock": 5 },
+      { "sku": "SBK-002", "barcode": "8992753210028", "name": "Minyak Goreng Bimoli 2L", "category": "Minyak & Mentega", "unit": "pouch", "buy_price": 34000, "sell_price": 38000, "stock": 40, "min_stock": 8 },
+      { "sku": "SBK-003", "barcode": "8992753210035", "name": "Telur Ayam Negeri 1kg", "category": "Telur & Susu", "unit": "kg", "buy_price": 27000, "sell_price": 31000, "stock": 18, "min_stock": 5 },
+      { "sku": "SBK-004", "barcode": "8992753210042", "name": "Gula Pasir Gulaku Premium 1kg", "category": "Gula & Manisan", "unit": "pcs", "buy_price": 16000, "sell_price": 18500, "stock": 35, "min_stock": 10 },
+      { "sku": "SBK-005", "barcode": "8992753210059", "name": "Indomie Goreng Spesial 85g", "category": "Mie & Makanan Instan", "unit": "pcs", "buy_price": 2800, "sell_price": 3500, "stock": 120, "min_stock": 20 },
+      { "sku": "SBK-006", "barcode": "8992753210066", "name": "Kecap Manis Bango 520ml", "category": "Bumbu Dapur", "unit": "pouch", "buy_price": 21000, "sell_price": 24000, "stock": 15, "min_stock": 4 },
+      { "sku": "SBK-007", "barcode": "8992753210073", "name": "Tepung Terigu Segitiga Biru 1kg", "category": "Tepung & Olahan", "unit": "pcs", "buy_price": 11500, "sell_price": 13500, "stock": 30, "min_stock": 6 },
+      { "sku": "SBK-008", "barcode": "8992753210080", "name": "Sabun Cuci Sunlight Jeruk Nipis 750ml", "category": "Kebersihan & Sabun", "unit": "pouch", "buy_price": 14000, "sell_price": 16500, "stock": 22, "min_stock": 5 },
+      { "sku": "SBK-009", "barcode": "8992753210097", "name": "Kopi Kapal Api Spesial Mix 1 Renteng", "category": "Kopi & Teh", "unit": "renteng", "buy_price": 12000, "sell_price": 15000, "stock": 28, "min_stock": 6 },
+      { "sku": "SBK-010", "barcode": "8992753210103", "name": "Garam Dapur Beryodium Cap Kapal 250g", "category": "Bumbu Dapur", "unit": "pcs", "buy_price": 2500, "sell_price": 3500, "stock": 3, "min_stock": 5 }
+    ]
+  },
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": {
+    "design_spirit": "Clean modern Indonesian warung POS: crisp emerald green (#15803D), deep forest header, warm golden accents, clean white cards, high-contrast readable typography for fast cashier checkout. No AI slop or generic gray cards.",
+    "testing_requirement": "Every actionable button, input, tab, modal trigger, and badge MUST have a meaningful data-testid (e.g. data-testid='pos-barcode-input', data-testid='pos-checkout-btn', data-testid='quick-cash-pas-btn', data-testid='print-thermal-receipt-btn').",
+    "currency_formatting": "All monetary values must be formatted in Indonesian Rupiah standard (e.g., 'Rp 75.000' using Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }))."
+  }
+}
