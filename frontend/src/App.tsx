@@ -13,6 +13,8 @@ import Suppliers from "@/pages/Suppliers";
 import Returns from "@/pages/Returns";
 import Reports from "@/pages/Reports";
 import Shifts from "@/pages/Shifts";
+import Customers from "@/pages/Customers";
+import Expenses from "@/pages/Expenses";
 
 export default function App() {
   return (
@@ -28,6 +30,8 @@ export default function App() {
         <Route path="/returns" element={<Returns />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/shifts" element={<Shifts />} />
+        <Route path="/customers" element={<Customers />} />
+        <Route path="/expenses" element={<Expenses />} />
         <Route path="/sales" element={<Sales />} />
         <Route path="/users" element={<Users />} />
         <Route path="/settings" element={<Settings />} />

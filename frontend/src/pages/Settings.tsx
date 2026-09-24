@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 function testSale(): Sale {
   return {
     id: "test", invoice_no: "TEST-PRINT", subtotal: 111000, discount: 0, tax: 0, total: 111000, payment_method: "cash",
-    amount_paid: 120000, change: 9000, cashier_name: "Test", status: "completed", void_reason: null,
+    amount_paid: 120000, change: 9000, cashier_name: "Test", status: "completed", void_reason: null, customer_id: null, customer_name: null,
     date: "", created_at: new Date().toISOString(),
     items: [
       { product_id: "1", name: "Beras", unit: "karung", qty: 1, price: 75000, buy_price: 0, discount: 0, subtotal: 75000 },
@@ -46,6 +46,8 @@ function SettingsForm({ initial }: { initial: SettingsData }) {
           <option value="58">58 mm</option><option value="80">80 mm</option>
         </select>
       </div>
+      <div className="space-y-1"><Label>WhatsApp pemilik (tujuan laporan)</Label><Input value={f.owner_whatsapp} onChange={(e) => setF({ ...f, owner_whatsapp: e.target.value })} placeholder="08xxxxxxxxxx" data-testid="settings-owner-wa-input" /></div>
+      <div className="space-y-1"><Label>Kategori pengeluaran (pisahkan koma)</Label><Input value={f.expense_categories.join(", ")} onChange={(e) => setF({ ...f, expense_categories: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })} data-testid="settings-expense-categories-input" /></div>
       <div className="space-y-1"><Label>Pajak (%)</Label><Input type="number" min={0} max={100} value={f.tax_percent} onChange={(e) => setF({ ...f, tax_percent: Number(e.target.value) })} data-testid="settings-tax-input" /></div>
       <div className="space-y-1"><Label>Prefix nomor transaksi</Label><Input value={f.invoice_prefix} onChange={(e) => setF({ ...f, invoice_prefix: e.target.value })} data-testid="settings-prefix-input" /></div>
       <div className="space-y-1 md:col-span-2"><Label>Footer struk</Label><Textarea value={f.receipt_footer} onChange={(e) => setF({ ...f, receipt_footer: e.target.value })} data-testid="settings-footer-input" /></div>

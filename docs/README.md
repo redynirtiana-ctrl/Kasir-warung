@@ -37,6 +37,25 @@ Versi saat ini mencetak lewat dialog print browser (CSS `@page` 58/80mm). Atur p
 Scanner USB (HID) mengetik kode + Enter ke kolom scan di halaman Kasir (fokus otomatis, F3 untuk kembali fokus).
 
 ## CHANGELOG
+### 1.3.0
+- Laporan malam otomatis: cron platform `.emergent/crons.yml` (23:55 WIB) → `POST /api/v1/cron/daily-report` (Bearer `WEBHOOK_CRON_SECRET`, idempotent via X-Webhook-Id) menyimpan snapshot ke koleksi `daily_reports`; tab "Arsip Harian" + tombol "Simpan sekarang"
+- Pelanggan & hutang: CRUD pelanggan, riwayat transaksi, metode bayar "Hutang" di kasir (wajib pelanggan, DP, jatuh tempo), piutang dengan cicilan, status lunas, tanda lewat jatuh tempo, pengingat WhatsApp
+- Pengeluaran toko: CRUD per kategori (kategori diatur di Pengaturan), masuk laporan harian → laba bersih
+- Kirim WhatsApp satu klik (wa.me) untuk laporan harian, arsip, dan daftar belanja per supplier; nomor pemilik di Pengaturan
+- Shift: cash seharusnya ikut DP hutang & cicilan yang diterima kasir
+
+## Rekomendasi perangkat
+**Printer label barcode (stiker)**
+- Xprinter XP-365B / XP-360B (USB, thermal direct, label 20–80 mm) — murah & paling umum di Indonesia (± Rp 700 rb–1 jt)
+- Zebra ZD220d / ZD230d (USB, sangat awet, driver stabil) — untuk pemakaian berat (± Rp 3–4 jt)
+- Label: stiker thermal 50×30 mm atau 40×30 mm (gap), set ukuran yang sama di dialog "Cetak Label" dan di driver printer (margin 0)
+- Printer struk (sudah ada di sistem): Xprinter XP-58IIH (58 mm) atau Epson TM-T82X (80 mm)
+
+**Scanner barcode USB (HID keyboard, plug & play)**
+- Zebra Symbol LS2208 (laser 1D, sangat tahan banting, ± Rp 1–1,5 jt)
+- Honeywell Voyager 1250g / 1450g (1450g bisa QR/2D, ± Rp 1,5–2,5 jt)
+- Budget: Eppos EP-2208 / Netum NT-1228BL (± Rp 200–450 rb)
+- Pastikan setelan scanner: suffix **Enter (CR)** aktif, keyboard layout US — kasir cukup fokus di kolom scan (F3)
 ### 1.2.0
 - Retur penjualan & retur pembelian (stok otomatis disesuaikan, validasi qty sisa, nomor RTR)
 - Shift kasir: buka shift + modal awal, pengeluaran laci, tutup shift dengan cash aktual & selisih, cetak laporan shift, riwayat

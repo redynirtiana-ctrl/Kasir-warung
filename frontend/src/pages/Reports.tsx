@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { FileSpreadsheet, FileText, Printer, ShoppingBasket } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { FileSpreadsheet, FileText, Printer, ShoppingBasket, MessageCircle, Archive, Moon } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { apiGet } from "@/lib/api";
-import type { DailyReport, RestockGroup, Settings } from "@/lib/types";
-import { num, PAYMENT_LABELS, rupiah } from "@/lib/format";
+import { apiGet, apiPost } from "@/lib/api";
+import type { DailyReport, DailyReportSnapshot, RestockGroup, Settings } from "@/lib/types";
+import { fmtDateTime, num, PAYMENT_LABELS, rupiah, waLink } from "@/lib/format";
 import { printHtml } from "@/lib/print";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +31,22 @@ function reportRows(r: DailyReport): [string, string][] {
     ...Object.entries(r.by_payment).map(([k, v]) => [PAYMENT_LABELS[k] ?? k, rupiah(v)] as [string, string]),
     ["Transaksi void", num(r.void_count)],
     ["Retur penjualan", rupiah(r.sale_returns_total)],
+    ...Object.entries(r.expenses_by_category).map(([k, v]) => [`Pengeluaran: ${k}`, rupiah(v)] as [string, string]),
+    ["Total pengeluaran", rupiah(r.expenses_total)],
+    ["Laba bersih", rupiah(r.net_profit)],
+    ["Hutang baru", rupiah(r.debt_new)],
+    ["Cicilan hutang diterima", rupiah(r.debt_collected)],
   ];
+}
+
+function dailyWaText(r: DailyReport, store: string): string {
+  const pay = Object.entries(r.by_payment).map(([k, v]) => `${PAYMENT_LABELS[k] ?? k}: ${rupiah(v)}`).join("\n");
+  return `*LAPORAN PENJUALAN HARIAN*\n${store}\nTanggal: ${longDate(r.date)}\n\nTotal transaksi: ${num(r.transaction_count)}\nProduk terjual: ${num(r.items_sold)}\n\nOmzet: ${rupiah(r.omzet)}\nModal: ${rupiah(r.modal)}\nEstimasi keuntungan: ${rupiah(r.profit)}\nPengeluaran: ${rupiah(r.expenses_total)}\n*Laba bersih: ${rupiah(r.net_profit)}*\n\n${pay}${r.debt_new ? `\n\nHutang baru: ${rupiah(r.debt_new)}` : ""}`;
+}
+
+function sendWa(settings: Settings | undefined, text: string) {
+  if (!settings?.owner_whatsapp) toast.info("Nomor WhatsApp pemilik belum diisi di Pengaturan — pilih kontak di WhatsApp");
+  window.open(waLink(settings?.owner_whatsapp ?? "", text), "_blank");
 }
 
 function DailyTab({ settings }: { settings?: Settings }) {
@@ -59,6 +75,7 @@ ${top ? `<h2 style="margin-top:18px">Produk Terlaris</h2><table><tr><th>Produk</
         <Button variant="outline" onClick={print} disabled={!r} data-testid="report-print-button"><Printer /> Cetak</Button>
         <a className={buttonVariants({ variant: "outline" })} href={`/api/v1/reports/daily.pdf?date=${date}`} data-testid="report-pdf-link"><FileText /> Download PDF</a>
         <a className={buttonVariants({ variant: "outline" })} href={`/api/v1/reports/daily.xlsx?date=${date}`} data-testid="report-excel-link"><FileSpreadsheet /> Download Excel</a>
+        <Button className="bg-[#25D366] text-white hover:bg-[#1ebe5b]" disabled={!r} onClick={() => r && sendWa(settings, dailyWaText(r, settings?.store_name ?? ""))} data-testid="report-wa-button"><MessageCircle /> Kirim WhatsApp</Button>
       </div>
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {cards.map(([l, v, cls, id]) => (
@@ -112,7 +129,10 @@ function RestockTab({ settings }: { settings?: Settings }) {
         <div key={g.supplier} className="rounded-2xl border bg-white shadow-sm" data-testid={`restock-group-${g.supplier}`}>
           <div className="flex items-center justify-between border-b px-5 py-3">
             <div className="flex items-center gap-2 font-semibold"><ShoppingBasket className="size-4 text-amber-600" /> {g.supplier} <span className="text-sm font-normal text-muted-foreground">· {g.items.length} barang · {rupiah(g.total_cost)}</span></div>
-            <Button size="sm" variant="outline" onClick={() => printGroup(g)} data-testid={`restock-print-${g.supplier}`}><Printer /> Cetak</Button>
+            <div className="flex gap-1">
+              <Button size="sm" className="bg-[#25D366] text-white hover:bg-[#1ebe5b]" onClick={() => sendWa(settings, `*DAFTAR BELANJA — ${g.supplier}*\n${settings?.store_name ?? ""} · ${longDate(todayLocal())}\n\n${g.items.map((i, n) => `${n + 1}. ${i.name} — ${num(i.suggested_qty)} ${i.unit} (stok ${num(i.stock)})`).join("\n")}\n\nEstimasi: ${rupiah(g.total_cost)}`)} data-testid={`restock-wa-${g.supplier}`}><MessageCircle /> WhatsApp</Button>
+              <Button size="sm" variant="outline" onClick={() => printGroup(g)} data-testid={`restock-print-${g.supplier}`}><Printer /> Cetak</Button>
+            </div>
           </div>
           <Table>
             <TableHeader><TableRow><TableHead>Produk</TableHead><TableHead className="text-right">Stok</TableHead><TableHead className="text-right">Min</TableHead><TableHead className="text-right">Saran pesan</TableHead><TableHead className="text-right">Estimasi biaya</TableHead></TableRow></TableHeader>
@@ -135,6 +155,51 @@ function RestockTab({ settings }: { settings?: Settings }) {
   );
 }
 
+function ArchiveTab({ settings }: { settings?: Settings }) {
+  const qc = useQueryClient();
+  const [view, setView] = useState<DailyReportSnapshot | null>(null);
+  const { data: snaps = [] } = useQuery({ queryKey: ["reports", "archive"], queryFn: () => apiGet<DailyReportSnapshot[]>("/v1/reports/archive") });
+  const snap = useMutation({
+    mutationFn: () => apiPost<DailyReportSnapshot>(`/v1/reports/archive/${todayLocal()}`),
+    onSuccess: () => { toast.success("Laporan hari ini disimpan ke arsip"); qc.invalidateQueries({ queryKey: ["reports", "archive"] }); },
+  });
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+        <span className="flex items-center gap-2"><Moon className="size-4" /> Laporan harian otomatis tersimpan setiap malam pukul 23:55 WIB.</span>
+        <Button size="sm" variant="outline" onClick={() => snap.mutate()} disabled={snap.isPending} data-testid="archive-snapshot-button"><Archive /> Simpan sekarang</Button>
+      </div>
+      <div className="rounded-2xl border bg-white shadow-sm">
+        <Table>
+          <TableHeader><TableRow><TableHead>Tanggal</TableHead><TableHead className="text-right">Transaksi</TableHead><TableHead className="text-right">Omzet</TableHead><TableHead className="text-right">Laba bersih</TableHead><TableHead>Dibuat</TableHead><TableHead /></TableRow></TableHeader>
+          <TableBody>
+            {snaps.map((x) => (
+              <TableRow key={x.date} data-testid={`archive-row-${x.date}`}>
+                <TableCell className="font-medium">{longDate(x.date)}</TableCell>
+                <TableCell className="text-right">{num(x.report.transaction_count)}</TableCell>
+                <TableCell className="text-right">{rupiah(x.report.omzet)}</TableCell>
+                <TableCell className="text-right font-semibold">{rupiah(x.report.net_profit)}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{fmtDateTime(x.generated_at)} · {x.source === "cron" ? "otomatis" : "manual"}</TableCell>
+                <TableCell className="text-right">
+                  <Button size="sm" variant="ghost" onClick={() => setView(x)} data-testid={`archive-view-${x.date}`}>Lihat</Button>
+                  <Button size="sm" variant="ghost" onClick={() => sendWa(settings, dailyWaText(x.report, settings?.store_name ?? ""))} data-testid={`archive-wa-${x.date}`}><MessageCircle /></Button>
+                </TableCell>
+              </TableRow>
+            ))}
+            {snaps.length === 0 && <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">Belum ada arsip</TableCell></TableRow>}
+          </TableBody>
+        </Table>
+      </div>
+      {view && (
+        <div className="rounded-2xl border bg-white p-5 shadow-sm" data-testid="archive-detail">
+          <h3 className="mb-2 font-semibold">LAPORAN PENJUALAN HARIAN · {longDate(view.date)}</h3>
+          <div className="divide-y text-sm">{reportRows(view.report).map(([l, v]) => <div key={l} className="flex justify-between py-1.5"><span>{l}</span><span className="font-medium">{v}</span></div>)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Reports() {
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: () => apiGet<Settings>("/v1/settings") });
   return (
@@ -147,9 +212,11 @@ export default function Reports() {
         <TabsList>
           <TabsTrigger value="daily" data-testid="reports-tab-daily">Laporan Harian</TabsTrigger>
           <TabsTrigger value="restock" data-testid="reports-tab-restock">Saran Belanja</TabsTrigger>
+          <TabsTrigger value="archive" data-testid="reports-tab-archive">Arsip Harian</TabsTrigger>
         </TabsList>
         <TabsContent value="daily" className="mt-4"><DailyTab settings={settings} /></TabsContent>
         <TabsContent value="restock" className="mt-4"><RestockTab settings={settings} /></TabsContent>
+        <TabsContent value="archive" className="mt-4"><ArchiveTab settings={settings} /></TabsContent>
       </Tabs>
     </div>
   );

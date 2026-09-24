@@ -51,7 +51,8 @@ ${line("No", sale.invoice_no)}${line("Tanggal", new Date(sale.created_at).toLoca
 <div class="hr"></div>${rows}<div class="hr"></div>
 ${line("Subtotal", num(sale.subtotal))}${sale.discount ? line("Diskon", "-" + num(sale.discount)) : ""}${sale.tax ? line("Pajak", num(sale.tax)) : ""}
 ${line("TOTAL", num(sale.total), "b big")}
-${line("Bayar (" + (PAYMENT_LABELS[sale.payment_method] ?? sale.payment_method) + ")", num(sale.amount_paid))}${line("Kembalian", num(sale.change))}
+${line("Bayar (" + (PAYMENT_LABELS[sale.payment_method] ?? sale.payment_method) + ")", num(sale.amount_paid))}${sale.payment_method === "hutang" ? line("Sisa hutang", num(sale.total - sale.amount_paid), "b") : line("Kembalian", num(sale.change))}
+${sale.customer_name ? line("Pelanggan", esc(sale.customer_name)) : ""}
 ${sale.status === "void" ? '<div class="c b">*** VOID ***</div>' : ""}
 <div class="hr"></div><div class="c">${esc(s.receipt_footer).replace(/\n/g, "<br>")}</div><div class="hr"></div>`;
 }

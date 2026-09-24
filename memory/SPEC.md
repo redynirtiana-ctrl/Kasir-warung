@@ -23,6 +23,15 @@ users, categories, products (sku unique, barcode unique sparse), sales (invoice_
 - purchases (admin): GET (supplier_id, start, end), POST {supplier_id, invoice_no (unique per supplier, 409), date YYYY-MM-DD, items[{product_id, qty, buy_price}], note, update_buy_price} → stock += qty, movement "purchase", optional buy_price update + price_history
 - returns (admin): GET (type, ref_id), GET /returns/returned/{ref_id}, POST {type sale|purchase, ref_id, items[{product_id, qty}], reason} — qty ≤ original − already returned; sale return stock += qty (refund = line subtotal/qty), purchase return stock −= qty (needs stock); movement "return"; number RTR-YYYYMMDD-####
 - shifts (any user, own shift): GET /shifts/current (with live summary), POST /shifts/open {opening_cash}, POST /shifts/current/expenses {amount, note}, POST /shifts/close {actual_cash} → summary (by_payment, expenses, cash refunds, expected_cash = opening + cash sales − expenses − cash refunds), difference; GET /shifts (admin all, kasir own). Sales counted = cashier's completed sales since opened_at.
+- customers (read/create any user; edit/delete admin): GET (debt_remaining, transaction_count), POST, PUT/{id}, DELETE/{id} (blocked with open debt), GET /customers/{id}/sales
+- Sale: optional customer_id; payment_method "hutang" requires customer, amount_paid = DP (< total), due_date → creates debts doc {total, paid, remaining, due_date, status open|paid, payments[]}
+- debts (admin): GET (status, customer_id), POST /debts/{id}/payments {amount ≤ remaining}
+- expenses (admin): GET (start,end,category), POST, PUT/{id}, DELETE/{id}; categories from settings.expense_categories
+- DailyReport now also: expenses_total, expenses_by_category, net_profit (= profit − expenses), debt_new, debt_collected
+- reports archive (admin): GET /reports/archive, POST /reports/archive/{date}; cron POST /api/v1/cron/daily-report (Bearer WEBHOOK_CRON_SECRET, 401 otherwise) scheduled 23:55 Asia/Jakarta in .emergent/crons.yml
+- Settings: owner_whatsapp (WA target for reports), expense_categories
+- Seed/demo customers: Bu Siti (081234500001), Pak Joko (081234500002)
+- Frontend: /customers (Pelanggan + Piutang tabs, pay, WA reminder), /expenses, /reports tab Arsip Harian, WA buttons (wa.me links, no API)
 - reports (admin): GET /reports/daily?date, /reports/daily.pdf, /reports/daily.xlsx (file downloads), GET /reports/restock (stock ≤ min grouped by product.supplier, suggested = 2×min − stock)
 
 ## Frontend flows

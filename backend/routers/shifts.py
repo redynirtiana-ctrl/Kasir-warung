@@ -18,7 +18,7 @@ async def compute_summary(shift: dict, until: datetime | None = None) -> ShiftSu
     q = {"cashier_id": shift["user_id"], "status": "completed", "created_at": {"$gte": _aware(shift["opened_at"])}}
     if until:
         q["created_at"]["$lte"] = until
-    sales = await db.sales.find(q, {"_id": 0, "total": 1, "payment_method": 1, "id": 1}).to_list(10000)
+    sales = await db.sales.find(q, {"_id": 0, "total": 1, "payment_method": 1, "id": 1, "amount_paid": 1}).to_list(10000)
     by_payment: dict[str, float] = {}
     for s in sales:
         by_payment[s["payment_method"]] = by_payment.get(s["payment_method"], 0) + s["total"]
@@ -30,7 +30,16 @@ async def compute_summary(shift: dict, until: datetime | None = None) -> ShiftSu
         async for r in db.returns.find({"type": "sale", "ref_id": {"$in": list(cash_ids)}}, {"total": 1}):
             refunds += r["total"]
     expenses = sum(e["amount"] for e in shift.get("expenses", []))
-    expected = shift["opening_cash"] + by_payment.get("cash", 0) - expenses - refunds
+    # cash that entered the drawer outside normal cash sales: hutang DPs + debt installments this user received
+    dp = sum(s.get("amount_paid", 0) for s in sales if s["payment_method"] == "hutang")
+    start = _aware(shift["opened_at"])
+    collected = 0.0
+    async for d in db.debts.find({"payments.user_id": shift["user_id"]}, {"payments": 1}):
+        for p in d["payments"]:
+            ts = _aware(p["created_at"])
+            if p.get("user_id") == shift["user_id"] and ts >= start and (until is None or ts <= until):
+                collected += p["amount"]
+    expected = shift["opening_cash"] + by_payment.get("cash", 0) + dp + collected - expenses - refunds
     return ShiftSummary(transaction_count=len(sales), total_sales=sum(s["total"] for s in sales),
                         by_payment=by_payment, expenses_total=expenses, refunds_cash=refunds, expected_cash=expected)
 

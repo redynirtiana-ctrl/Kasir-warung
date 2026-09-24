@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ScanBarcode, Search, Trash2, Minus, Plus, PauseCircle, FolderOpen, Printer, CreditCard, X } from "lucide-react";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
-import type { Category, PaymentMethod, Product, Sale, SaleIn, Settings } from "@/lib/types";
+import type { Category, Customer, PaymentMethod, Product, Sale, SaleIn, Settings } from "@/lib/types";
 import { errMsg, num, PAYMENT_LABELS, rupiah, stockStatus } from "@/lib/format";
 import { printReceipt, receiptHtml } from "@/lib/print";
 import { useMe } from "@/lib/session";
@@ -53,6 +53,8 @@ export default function Pos() {
   const [heldOpen, setHeldOpen] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [paid, setPaid] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
@@ -61,6 +63,7 @@ export default function Pos() {
   const { data: products = [] } = useQuery({ queryKey: ["products", "pos"], queryFn: () => apiGet<Product[]>("/v1/products?active_only=true") });
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: () => apiGet<Category[]>("/v1/categories") });
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: () => apiGet<Settings>("/v1/settings") });
+  const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: () => apiGet<Customer[]>("/v1/customers"), enabled: payOpen });
 
   useEffect(() => localStorage.setItem(STORAGE, JSON.stringify(carts)), [carts]);
   useEffect(() => {
@@ -132,6 +135,8 @@ export default function Pos() {
     if (!cart.items.length) return toast.info("Keranjang masih kosong");
     setMethod("cash");
     setPaid("");
+    setCustomerId("");
+    setDueDate("");
     setPayOpen(true);
   };
 
@@ -148,18 +153,24 @@ export default function Pos() {
       qc.invalidateQueries({ queryKey: ["sales"] });
       qc.invalidateQueries({ queryKey: ["shift"] });
       qc.invalidateQueries({ queryKey: ["reports"] });
+      qc.invalidateQueries({ queryKey: ["customers"] });
+      qc.invalidateQueries({ queryKey: ["debts"] });
     },
     onError: (e) => toast.error(errMsg(e)),
   });
 
   const submitPay = () => {
     if (method === "cash" && paidNum < totals.total) return toast.error("Uang diterima kurang");
+    if (method === "hutang" && !customerId) return toast.error("Pilih pelanggan untuk hutang");
+    if (method === "hutang" && paidNum >= totals.total) return toast.error("DP harus lebih kecil dari total");
     pay.mutate({
+      customer_id: customerId || null,
+      due_date: method === "hutang" && dueDate ? dueDate : null,
       items: cart.items.map((i) => ({ product_id: i.product.id, qty: i.qty, discount: i.discount })),
       discount_type: cart.discountType,
       discount_value: cart.discountValue,
       payment_method: method,
-      amount_paid: method === "cash" ? paidNum : totals.total,
+      amount_paid: method === "cash" || method === "hutang" ? paidNum : totals.total,
     });
   };
 
@@ -336,6 +347,20 @@ export default function Pos() {
               </button>
             ))}
           </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Pelanggan {method === "hutang" ? "(wajib)" : "(opsional)"}</label>
+            <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="h-9 w-full rounded-md border bg-white px-2 text-sm" data-testid="pay-customer-select">
+              <option value="">- Umum -</option>
+              {customers.map((c) => <option key={c.id} value={c.id}>{c.debt_remaining > 0 ? `${c.name} (hutang ${rupiah(c.debt_remaining)})` : c.name}</option>)}
+            </select>
+          </div>
+          {method === "hutang" && (
+            <div className="grid grid-cols-2 gap-2 rounded-lg bg-amber-50 p-3">
+              <div className="space-y-1"><label className="text-xs font-medium">DP / uang muka</label><Input type="number" min={0} value={paid} onChange={(e) => setPaid(e.target.value)} data-testid="pay-dp-input" /></div>
+              <div className="space-y-1"><label className="text-xs font-medium">Jatuh tempo</label><Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} data-testid="pay-due-date-input" /></div>
+              <div className="col-span-2 flex justify-between text-sm font-semibold text-amber-900"><span>Sisa hutang</span><span data-testid="pay-debt-remaining">{rupiah(Math.max(totals.total - paidNum, 0))}</span></div>
+            </div>
+          )}
           {method === "cash" && (
             <div className="space-y-2">
               <Input autoFocus type="number" placeholder="Uang diterima" value={paid} onChange={(e) => setPaid(e.target.value)}

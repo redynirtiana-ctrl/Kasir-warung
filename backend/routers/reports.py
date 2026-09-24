@@ -1,17 +1,23 @@
+import asyncio
+import hmac
 import io
-from datetime import datetime
+import logging
+import os
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from lib.auth import require_admin
 from lib.db import db
-from models.schemas import DailyReport, RestockGroup, RestockItem
+from models.schemas import DailyReport, DailyReportSnapshot, RestockGroup, RestockItem
 from routers.sales import get_settings, store_tz
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+cron_router = APIRouter(prefix="/cron", tags=["cron"])
+logger = logging.getLogger("wbc.reports")
 
-PAY = {"cash": "Cash", "qris": "QRIS", "transfer": "Transfer", "debit": "Debit", "kredit": "Kredit", "ewallet": "E-Wallet"}
+PAY = {"cash": "Cash", "qris": "QRIS", "transfer": "Transfer", "debit": "Debit", "kredit": "Kredit", "ewallet": "E-Wallet", "hutang": "Hutang"}
 MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
 
 
@@ -53,10 +59,25 @@ async def build_daily(date: str) -> DailyReport:
     discount = sum(s["discount"] + sum(i["discount"] for i in s["items"]) for s in done)
     net_before_tax = sum(s["subtotal"] - s["discount"] for s in done)
     top = sorted(prod.values(), key=lambda x: -x["qty"])[:10]
+    exps = await db.expenses.find({"date": date}, {"_id": 0}).to_list(5000)
+    by_cat: dict[str, float] = {}
+    for e in exps:
+        by_cat[e["category"]] = by_cat.get(e["category"], 0) + e["amount"]
+    exp_total = sum(by_cat.values())
+    profit = net_before_tax - modal
+    debt_new = sum(s["total"] - s["amount_paid"] for s in done if s["payment_method"] == "hutang")
+    collected = 0.0
+    async for d in db.debts.find({"payments": {"$exists": True, "$ne": []}}, {"payments": 1}):
+        for p in d["payments"]:
+            ts = p["created_at"] if p["created_at"].tzinfo else p["created_at"].replace(tzinfo=timezone.utc)
+            if ts.astimezone(store_tz()).strftime("%Y-%m-%d") == date:
+                collected += p["amount"]
     return DailyReport(date=date, transaction_count=len(done), items_sold=sum(i["qty"] for s in done for i in s["items"]),
-                       omzet=omzet, discount=discount, modal=modal, profit=net_before_tax - modal,
+                       omzet=omzet, discount=discount, modal=modal, profit=profit,
                        by_payment=by_payment, void_count=len(sales) - len(done),
-                       sale_returns_total=sum(r["total"] for r in returns), top_products=top)
+                       sale_returns_total=sum(r["total"] for r in returns), top_products=top,
+                       expenses_total=exp_total, expenses_by_category=by_cat, net_profit=profit - exp_total,
+                       debt_new=debt_new, debt_collected=collected)
 
 
 @router.get("/daily", response_model=DailyReport)
@@ -69,6 +90,9 @@ def _rows(r: DailyReport) -> list[tuple[str, str]]:
             ("Omzet", _rp(r.omzet)), ("Diskon", _rp(r.discount)), ("Modal", _rp(r.modal)),
             ("Estimasi keuntungan", _rp(r.profit))]
     rows += [(PAY.get(k, k), _rp(v)) for k, v in r.by_payment.items()]
+    rows += [(f"Pengeluaran: {k}", _rp(v)) for k, v in r.expenses_by_category.items()]
+    rows += [("Total pengeluaran", _rp(r.expenses_total)), ("Laba bersih", _rp(r.net_profit)),
+             ("Hutang baru", _rp(r.debt_new)), ("Cicilan hutang diterima", _rp(r.debt_collected))]
     rows += [("Transaksi void", str(r.void_count)), ("Retur penjualan", _rp(r.sale_returns_total))]
     return rows
 
@@ -146,3 +170,54 @@ async def restock(_: dict = Depends(require_admin)):
             min_stock=p["min_stock"], suggested_qty=qty, buy_price=p["buy_price"], estimated_cost=qty * p["buy_price"]))
     out = [RestockGroup(supplier=k, items=v, total_cost=sum(i.estimated_cost for i in v)) for k, v in groups.items()]
     return sorted(out, key=lambda g: (g.supplier == "Tanpa supplier", g.supplier))
+
+
+# ---------- archived nightly snapshots (daily_reports) ----------
+async def save_snapshot(date: str, source: str) -> DailyReportSnapshot:
+    snap = DailyReportSnapshot(date=date, generated_at=datetime.now(timezone.utc), source=source,
+                               report=await build_daily(date))
+    await db.daily_reports.update_one({"date": date}, {"$set": snap.model_dump()}, upsert=True)
+    return snap
+
+
+@router.get("/archive", response_model=list[DailyReportSnapshot])
+async def archive(_: dict = Depends(require_admin)):
+    return await db.daily_reports.find({}, {"_id": 0}).sort("date", -1).to_list(400)
+
+
+@router.post("/archive/{date}", response_model=DailyReportSnapshot)
+async def snapshot_now(date: str, _: dict = Depends(require_admin)):
+    return await save_snapshot(_date(date), "manual")
+
+
+async def _nightly_job(run_id: str) -> None:
+    try:
+        today = datetime.now(store_tz()).date()
+        await save_snapshot(today.isoformat(), "cron")
+        yesterday = (today - timedelta(days=1)).isoformat()
+        if not await db.daily_reports.find_one({"date": yesterday}):  # catch-up if a night was missed
+            await save_snapshot(yesterday, "cron")
+        logger.info("nightly report saved (run %s)", run_id)
+    except Exception:
+        logger.exception("nightly report failed (run %s)", run_id)
+
+
+@cron_router.post("/daily-report", status_code=202)
+async def cron_daily_report(request: Request):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    auth = request.headers.get("authorization", "")
+    secret = os.environ.get("WEBHOOK_CRON_SECRET", "")
+    token = auth[7:] if auth.startswith("Bearer ") else ""
+    if not secret or not token or not hmac.compare_digest(token, secret):
+        raise HTTPException(401, "Unauthorized")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if body is not None and not isinstance(body, dict):
+        raise HTTPException(400, "Invalid body")
+    run_id = request.headers.get("x-webhook-id") or (body or {}).get("run_id") or datetime.now(timezone.utc).isoformat()
+    res = await db.cron_runs.update_one({"run_id": run_id}, {"$setOnInsert": {"run_id": run_id, "at": datetime.now(timezone.utc)}}, upsert=True)
+    if res.upserted_id is not None:
+        asyncio.create_task(_nightly_job(run_id))
+    return {"success": True, "message": "accepted"}

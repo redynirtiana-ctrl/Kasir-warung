@@ -60,7 +60,19 @@ async def create_sale(body: SaleIn, user: dict = Depends(get_current_user)):
     total = subtotal - discount + tax
     if body.payment_method == "cash" and body.amount_paid < total:
         raise HTTPException(400, "Uang diterima kurang dari total")
-    paid = body.amount_paid if body.payment_method == "cash" else max(body.amount_paid, total)
+    customer = None
+    if body.customer_id:
+        customer = await db.customers.find_one({"id": body.customer_id}, {"_id": 0})
+        if not customer:
+            raise HTTPException(400, "Pelanggan tidak ditemukan")
+    if body.payment_method == "hutang":
+        if not customer:
+            raise HTTPException(400, "Pilih pelanggan untuk transaksi hutang")
+        if body.amount_paid >= total:
+            raise HTTPException(400, "DP tidak boleh sama/lebih dari total, gunakan metode lain")
+        paid = body.amount_paid  # down payment (cash) — rest becomes debt
+    else:
+        paid = body.amount_paid if body.payment_method == "cash" else max(body.amount_paid, total)
 
     # Atomic conditional decrement per product; roll back on any failure (Mongo standalone has no txns).
     done: list[tuple[str, float]] = []
@@ -82,9 +94,14 @@ async def create_sale(body: SaleIn, user: dict = Depends(get_current_user)):
         after = it.pop("_after")
         await record_movement(products[it["product_id"]], "sale", -it["qty"], after + it["qty"], after, user, invoice)
     sale = Sale(id=str(uuid.uuid4()), invoice_no=invoice, items=items, subtotal=subtotal, discount=discount,
-                tax=tax, total=total, payment_method=body.payment_method, amount_paid=paid, change=paid - total,
-                cashier_name=user["full_name"], status="completed", date=date_str, created_at=now)
+                tax=tax, total=total, payment_method=body.payment_method, amount_paid=paid,
+                change=max(paid - total, 0), cashier_name=user["full_name"], status="completed",
+                customer_id=customer["id"] if customer else None, customer_name=customer["name"] if customer else None,
+                date=date_str, created_at=now)
     await db.sales.insert_one({**sale.model_dump(), "cashier_id": user["id"]})
+    if body.payment_method == "hutang":
+        from routers.customers import create_debt
+        await create_debt(sale.model_dump(), customer, body.due_date)
     await audit(user, "sale", f"{invoice} total {total:g}")
     return sale
 

@@ -100,3 +100,26 @@ def test_returns_shift_reports():
     assert admin.get(f"/reports/daily.xlsx?date={sale['date']}").content[:2] == b"PK"
     groups = admin.get("/reports/restock").json()
     assert any(i["id"] == p["id"] for g in groups for i in g["items"])
+
+
+def test_customer_debt_expense_report():
+    admin = _login("admin", "admin123")
+    c = admin.post("/customers", json={"name": f"Pelanggan {uuid.uuid4().hex[:5]}", "whatsapp": "0812"}).json()
+    p = admin.post("/products", json={"sku": f"T-{uuid.uuid4().hex[:6]}", "name": "Hutang Test", "buy_price": 1000, "sell_price": 5000, "stock": 10}).json()
+    # hutang without customer rejected
+    assert admin.post("/sales", json={"items": [{"product_id": p["id"], "qty": 2}], "payment_method": "hutang", "amount_paid": 0}).status_code == 400
+    sale = admin.post("/sales", json={"items": [{"product_id": p["id"], "qty": 2}], "payment_method": "hutang", "amount_paid": 3000,
+                                      "customer_id": c["id"], "due_date": "2026-10-01"}).json()
+    assert sale["customer_name"] == c["name"] and sale["change"] == 0
+    debt = [d for d in admin.get(f"/debts?customer_id={c['id']}").json()][0]
+    assert debt["remaining"] == 7000 and debt["status"] == "open"
+    assert admin.post(f"/debts/{debt['id']}/payments", json={"amount": 9000}).status_code == 400
+    d2 = admin.post(f"/debts/{debt['id']}/payments", json={"amount": 7000}).json()
+    assert d2["status"] == "paid" and d2["remaining"] == 0
+    e = admin.post("/expenses", json={"category": "Listrik", "amount": 2500, "date": sale["date"], "note": "token"}).json()
+    r = admin.get(f"/reports/daily?date={sale['date']}").json()
+    assert r["expenses_total"] >= 2500 and r["net_profit"] == r["profit"] - r["expenses_total"]
+    assert r["debt_collected"] >= 7000
+    kasir = _login("kasir", "kasir123")
+    assert kasir.get("/expenses").status_code == 403
+    admin.delete(f"/expenses/{e['id']}")

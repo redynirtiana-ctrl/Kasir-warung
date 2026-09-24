@@ -62,7 +62,7 @@ export interface StockAdjustIn {
   note: string;
 }
 
-export type PaymentMethod = "cash" | "qris" | "transfer" | "debit" | "kredit" | "ewallet";
+export type PaymentMethod = "cash" | "qris" | "transfer" | "debit" | "kredit" | "ewallet" | "hutang";
 
 export interface SaleItemIn {
   product_id: string;
@@ -76,6 +76,8 @@ export interface SaleIn {
   discount_value: number;
   payment_method: PaymentMethod;
   amount_paid: number;
+  customer_id: string | null;
+  due_date: string | null;
 }
 
 export interface SaleItem {
@@ -103,6 +105,8 @@ export interface Sale {
   cashier_name: string;
   status: "completed" | "void";
   void_reason: string | null;
+  customer_id: string | null;
+  customer_name: string | null;
   date: string;
   created_at: string;
 }
@@ -117,6 +121,8 @@ export interface Settings {
   currency: string;
   invoice_prefix: string;
   payment_methods: string[];
+  owner_whatsapp: string;
+  expense_categories: string[];
 }
 
 export interface ChartPoint {
@@ -291,6 +297,11 @@ export interface DailyReport {
   void_count: number;
   sale_returns_total: number;
   top_products: TopProduct[];
+  expenses_total: number;
+  expenses_by_category: Record<string, number>;
+  net_profit: number;
+  debt_new: number;
+  debt_collected: number;
 }
 
 export interface RestockItem {
@@ -309,4 +320,60 @@ export interface RestockGroup {
   supplier: string;
   items: RestockItem[];
   total_cost: number;
+}
+
+// ---------- customers, debts, expenses, archive ----------
+export interface CustomerIn {
+  name: string;
+  whatsapp: string;
+  address: string;
+  note: string;
+}
+
+export interface Customer extends CustomerIn {
+  id: string;
+  debt_remaining: number;
+  transaction_count: number;
+}
+
+export interface DebtPayment {
+  amount: number;
+  note: string;
+  username: string;
+  created_at: string;
+}
+
+export interface Debt {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  sale_id: string;
+  invoice_no: string;
+  total: number;
+  paid: number;
+  remaining: number;
+  due_date: string | null;
+  status: "open" | "paid";
+  payments: DebtPayment[];
+  created_at: string;
+}
+
+export interface ExpenseIn {
+  category: string;
+  amount: number;
+  date: string;
+  note: string;
+}
+
+export interface Expense extends ExpenseIn {
+  id: string;
+  username: string;
+  created_at: string;
+}
+
+export interface DailyReportSnapshot {
+  date: string;
+  generated_at: string;
+  source: "cron" | "manual";
+  report: DailyReport;
 }

@@ -100,7 +100,7 @@ class StockMovement(BaseModel):
 
 
 # ---------- sales ----------
-PaymentMethod = Literal["cash", "qris", "transfer", "debit", "kredit", "ewallet"]
+PaymentMethod = Literal["cash", "qris", "transfer", "debit", "kredit", "ewallet", "hutang"]
 
 
 class SaleItemIn(BaseModel):
@@ -115,6 +115,8 @@ class SaleIn(BaseModel):
     discount_value: float = Field(default=0, ge=0)
     payment_method: PaymentMethod
     amount_paid: float = Field(ge=0)
+    customer_id: str | None = None
+    due_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class SaleItem(BaseModel):
@@ -142,6 +144,8 @@ class Sale(BaseModel):
     cashier_name: str
     status: Literal["completed", "void"]
     void_reason: str | None = None
+    customer_id: str | None = None
+    customer_name: str | None = None
     date: str
     created_at: datetime
 
@@ -160,7 +164,9 @@ class Settings(BaseModel):
     tax_percent: float = Field(default=0, ge=0, le=100)
     currency: str = "Rp"
     invoice_prefix: str = "INV"
-    payment_methods: list[str] = ["cash", "qris", "transfer", "debit", "kredit", "ewallet"]
+    payment_methods: list[str] = ["cash", "qris", "transfer", "debit", "kredit", "ewallet", "hutang"]
+    owner_whatsapp: str = ""
+    expense_categories: list[str] = ["Listrik", "Air", "Transport", "Plastik", "ATK", "Operasional", "Lainnya"]
 
 
 # ---------- dashboard ----------
@@ -337,6 +343,11 @@ class DailyReport(BaseModel):
     void_count: int
     sale_returns_total: float
     top_products: list[dict]
+    expenses_total: float = 0
+    expenses_by_category: dict[str, float] = {}
+    net_profit: float = 0
+    debt_new: float = 0
+    debt_collected: float = 0
 
 
 class RestockItem(BaseModel):
@@ -355,3 +366,65 @@ class RestockGroup(BaseModel):
     supplier: str
     items: list[RestockItem]
     total_cost: float
+
+
+# ---------- customers & debts ----------
+class CustomerIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    whatsapp: str = ""
+    address: str = ""
+    note: str = ""
+
+
+class Customer(CustomerIn):
+    id: str = Field(default_factory=_id)
+    debt_remaining: float = 0
+    transaction_count: int = 0
+
+
+class DebtPaymentIn(BaseModel):
+    amount: float = Field(gt=0)
+    note: str = ""
+
+
+class DebtPayment(BaseModel):
+    amount: float
+    note: str
+    username: str
+    created_at: datetime
+
+
+class Debt(BaseModel):
+    id: str
+    customer_id: str
+    customer_name: str
+    sale_id: str
+    invoice_no: str
+    total: float
+    paid: float
+    remaining: float
+    due_date: str | None
+    status: Literal["open", "paid"]
+    payments: list[DebtPayment] = []
+    created_at: datetime
+
+
+# ---------- expenses ----------
+class ExpenseIn(BaseModel):
+    category: str = Field(min_length=1, max_length=40)
+    amount: float = Field(gt=0)
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    note: str = ""
+
+
+class Expense(ExpenseIn):
+    id: str = Field(default_factory=_id)
+    username: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+class DailyReportSnapshot(BaseModel):
+    date: str
+    generated_at: datetime
+    source: Literal["cron", "manual"]
+    report: DailyReport
