@@ -4,8 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ScanBarcode, Search, Trash2, Minus, Plus, PauseCircle, FolderOpen, Printer, CreditCard, X } from "lucide-react";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { effectivePrice, promoActive } from "@/lib/pricing";
 import type { Category, Customer, PaymentMethod, Product, Sale, SaleIn, Settings } from "@/lib/types";
-import { errMsg, num, PAYMENT_LABELS, rupiah, stockStatus } from "@/lib/format";
+import { todayLocal, errMsg, num, PAYMENT_LABELS, rupiah, stockStatus } from "@/lib/format";
 import { printReceipt, receiptHtml } from "@/lib/print";
 import { useMe } from "@/lib/session";
 import { Button } from "@/components/ui/button";
@@ -29,10 +30,13 @@ function loadCarts(): Cart[] {
   }
 }
 
-function calc(cart: Cart, taxPercent: number) {
-  const subtotal = cart.items.reduce((s, i) => s + Math.max(0, i.product.sell_price * i.qty - i.discount), 0);
+const TODAY = todayLocal();
+const unitPrice = (p: Product, qty: number) => effectivePrice(p, qty, TODAY);
+
+function calc(cart: Cart, taxPercent: number, extraDiscount = 0) {
+  const subtotal = cart.items.reduce((s, i) => s + Math.max(0, unitPrice(i.product, i.qty).price * i.qty - i.discount), 0);
   const raw = cart.discountType === "percent" ? (subtotal * cart.discountValue) / 100 : cart.discountValue;
-  const discount = Math.round(Math.min(raw, subtotal));
+  const discount = Math.round(Math.min(raw, subtotal)) + extraDiscount;
   const tax = Math.round(((subtotal - discount) * taxPercent) / 100);
   return { subtotal, discount, tax, total: subtotal - discount + tax };
 }
@@ -55,6 +59,7 @@ export default function Pos() {
   const [paid, setPaid] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [redeemPts, setRedeemPts] = useState(0);
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
@@ -63,7 +68,6 @@ export default function Pos() {
   const { data: products = [] } = useQuery({ queryKey: ["products", "pos"], queryFn: () => apiGet<Product[]>("/v1/products?active_only=true") });
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: () => apiGet<Category[]>("/v1/categories") });
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: () => apiGet<Settings>("/v1/settings") });
-  const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: () => apiGet<Customer[]>("/v1/customers"), enabled: payOpen });
 
   useEffect(() => localStorage.setItem(STORAGE, JSON.stringify(carts)), [carts]);
   useEffect(() => {
@@ -72,7 +76,14 @@ export default function Pos() {
   }, [search]);
 
   const cart = carts.find((c) => c.id === activeId) ?? carts[0];
+  const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: () => apiGet<Customer[]>("/v1/customers"), enabled: payOpen });
   const totals = calc(cart, settings?.tax_percent ?? 0);
+  const selCustomer = customers.find((c) => c.id === customerId);
+  const loyalty = !!settings?.loyalty_enabled && !!selCustomer;
+  const maxRedeem = loyalty && settings!.point_value > 0
+    ? Math.min(selCustomer!.points, Math.floor((totals.subtotal - totals.discount) / settings!.point_value)) : 0;
+  const pointsDiscount = loyalty ? Math.min(redeemPts, maxRedeem) * settings!.point_value : 0;
+  const payTotals = calc(cart, settings?.tax_percent ?? 0, pointsDiscount);
   const paidNum = Number(paid) || 0;
   const change = paidNum - totals.total;
 
@@ -137,6 +148,7 @@ export default function Pos() {
     setPaid("");
     setCustomerId("");
     setDueDate("");
+    setRedeemPts(0);
     setPayOpen(true);
   };
 
@@ -160,17 +172,19 @@ export default function Pos() {
   });
 
   const submitPay = () => {
-    if (method === "cash" && paidNum < totals.total) return toast.error("Uang diterima kurang");
+    if (method === "cash" && paidNum < payTotals.total) return toast.error("Uang diterima kurang");
     if (method === "hutang" && !customerId) return toast.error("Pilih pelanggan untuk hutang");
-    if (method === "hutang" && paidNum >= totals.total) return toast.error("DP harus lebih kecil dari total");
+    if (method === "hutang" && paidNum >= payTotals.total) return toast.error("DP harus lebih kecil dari total");
+    if (redeemPts && redeemPts < (settings?.min_redeem_points ?? 0)) return toast.error(`Minimal tukar ${settings?.min_redeem_points} poin`);
     pay.mutate({
+      redeem_points: redeemPts,
       customer_id: customerId || null,
       due_date: method === "hutang" && dueDate ? dueDate : null,
       items: cart.items.map((i) => ({ product_id: i.product.id, qty: i.qty, discount: i.discount })),
       discount_type: cart.discountType,
       discount_value: cart.discountValue,
       payment_method: method,
-      amount_paid: method === "cash" || method === "hutang" ? paidNum : totals.total,
+      amount_paid: method === "cash" || method === "hutang" ? paidNum : payTotals.total,
     });
   };
 
@@ -255,7 +269,10 @@ export default function Pos() {
               <button key={p.id} onClick={() => addToCart(p)} disabled={st === "habis"} data-testid={`pos-product-${p.sku}`}
                 className="flex flex-col rounded-xl border bg-white p-3 text-left transition-transform duration-75 hover:border-green-600 hover:shadow-md active:scale-95 disabled:opacity-50">
                 <span className="line-clamp-2 min-h-10 text-sm font-semibold">{p.name}</span>
-                <span className="mt-1 font-heading text-lg font-bold text-green-800">{rupiah(p.sell_price)}</span>
+                {promoActive(p, TODAY) ? (
+                  <span className="mt-1 flex items-baseline gap-1.5"><span className="font-heading text-lg font-bold text-rose-700">{rupiah(p.promo_price as number)}</span><span className="text-xs text-muted-foreground line-through">{rupiah(p.sell_price)}</span></span>
+                ) : <span className="mt-1 font-heading text-lg font-bold text-green-800">{rupiah(p.sell_price)}</span>}
+                {(p.wholesale_tiers?.length ?? 0) > 0 && <span className="text-[11px] font-medium text-sky-700">Grosir mulai {num(Math.min(...p.wholesale_tiers.map((t) => t.min_qty)))} {p.unit}</span>}
                 <span className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
                   <span>Stok {num(p.stock)} {p.unit}</span>
                   {st !== "aman" && <Badge className={st === "habis" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}>{st === "habis" ? "HABIS" : "MENIPIS"}</Badge>}
@@ -287,9 +304,15 @@ export default function Pos() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold">{i.product.name}</div>
-                  <div className="text-xs text-muted-foreground">{rupiah(i.product.sell_price)} · stok {num(i.product.stock)}</div>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    {(() => { const ep = unitPrice(i.product, i.qty); return (<>
+                      <span data-testid={`cart-item-price-${i.product.sku}`}>{rupiah(ep.price)}</span>
+                      {ep.type !== "normal" && <><span className="line-through">{rupiah(i.product.sell_price)}</span><Badge className={ep.type === "promo" ? "bg-rose-100 text-rose-800" : "bg-sky-100 text-sky-800"} data-testid={`cart-item-pricetype-${i.product.sku}`}>{ep.type === "promo" ? "PROMO" : "GROSIR"}</Badge></>}
+                    </>); })()}
+                    <span>· stok {num(i.product.stock)}</span>
+                  </div>
                 </div>
-                <div className="text-right font-semibold" data-testid={`cart-item-subtotal-${i.product.sku}`}>{rupiah(i.product.sell_price * i.qty - i.discount)}</div>
+                <div className="text-right font-semibold" data-testid={`cart-item-subtotal-${i.product.sku}`}>{rupiah(unitPrice(i.product, i.qty).price * i.qty - i.discount)}</div>
               </div>
               <div className="mt-1.5 flex items-center gap-2">
                 <Button size="icon-sm" variant="outline" onClick={() => setQty(i.product.id, i.qty - 1)} data-testid={`cart-dec-${i.product.sku}`}><Minus /></Button>
@@ -337,7 +360,7 @@ export default function Pos() {
           <DialogHeader><DialogTitle>Pembayaran</DialogTitle></DialogHeader>
           <div className="rounded-xl bg-green-50 p-4 text-center">
             <div className="text-sm text-green-800">Total Akhir</div>
-            <div className="font-heading text-3xl font-bold text-green-900" data-testid="pay-total">{rupiah(totals.total)}</div>
+            <div className="font-heading text-3xl font-bold text-green-900" data-testid="pay-total">{rupiah(payTotals.total)}</div>
           </div>
           <div className="grid grid-cols-3 gap-2">
             {methods.map((m) => (
@@ -354,11 +377,24 @@ export default function Pos() {
               {customers.map((c) => <option key={c.id} value={c.id}>{c.debt_remaining > 0 ? `${c.name} (hutang ${rupiah(c.debt_remaining)})` : c.name}</option>)}
             </select>
           </div>
+          {loyalty && (
+            <div className="rounded-lg bg-violet-50 p-3 text-sm" data-testid="pay-points-box">
+              <div className="flex justify-between"><span>Poin {selCustomer!.name}</span><b data-testid="pay-customer-points">{num(selCustomer!.points)} poin</b></div>
+              {maxRedeem >= (settings!.min_redeem_points || 1) ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <Input type="number" min={0} max={maxRedeem} value={redeemPts || ""} placeholder="Tukar poin" onChange={(e) => setRedeemPts(Math.max(0, Math.min(maxRedeem, Math.floor(Number(e.target.value) || 0))))} className="h-8 w-28" data-testid="pay-redeem-input" />
+                  <Button size="sm" variant="outline" onClick={() => setRedeemPts(maxRedeem)} data-testid="pay-redeem-max">Pakai semua</Button>
+                  {pointsDiscount > 0 && <span className="ml-auto font-semibold text-violet-800" data-testid="pay-points-discount">-{rupiah(pointsDiscount)}</span>}
+                </div>
+              ) : <p className="mt-1 text-xs text-muted-foreground">Minimal {settings!.min_redeem_points} poin untuk ditukar (1 poin = {rupiah(settings!.point_value)})</p>}
+              <p className="mt-1 text-xs text-violet-800">Dapat +{num(Math.floor(payTotals.total / settings!.points_per_amount))} poin dari transaksi ini</p>
+            </div>
+          )}
           {method === "hutang" && (
             <div className="grid grid-cols-2 gap-2 rounded-lg bg-amber-50 p-3">
               <div className="space-y-1"><label className="text-xs font-medium">DP / uang muka</label><Input type="number" min={0} value={paid} onChange={(e) => setPaid(e.target.value)} data-testid="pay-dp-input" /></div>
               <div className="space-y-1"><label className="text-xs font-medium">Jatuh tempo</label><Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} data-testid="pay-due-date-input" /></div>
-              <div className="col-span-2 flex justify-between text-sm font-semibold text-amber-900"><span>Sisa hutang</span><span data-testid="pay-debt-remaining">{rupiah(Math.max(totals.total - paidNum, 0))}</span></div>
+              <div className="col-span-2 flex justify-between text-sm font-semibold text-amber-900"><span>Sisa hutang</span><span data-testid="pay-debt-remaining">{rupiah(Math.max(payTotals.total - paidNum, 0))}</span></div>
             </div>
           )}
           {method === "cash" && (
@@ -367,7 +403,7 @@ export default function Pos() {
                 onKeyDown={(e) => e.key === "Enter" && submitPay()} className="h-12 text-lg" data-testid="pay-amount-input" />
               <div className="flex flex-wrap gap-2">
                 {quick.map((v) => (
-                  <Button key={v} size="sm" variant="secondary" onClick={() => setPaid(String(v))} data-testid={`pay-quick-${v}`}>{v === totals.total ? "Uang pas" : rupiah(v)}</Button>
+                  <Button key={v} size="sm" variant="secondary" onClick={() => setPaid(String(v))} data-testid={`pay-quick-${v}`}>{v === payTotals.total ? "Uang pas" : rupiah(v)}</Button>
                 ))}
               </div>
               <div className="flex justify-between text-lg">

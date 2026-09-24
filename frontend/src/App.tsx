@@ -16,6 +16,7 @@ import Shifts from "@/pages/Shifts";
 import Customers from "@/pages/Customers";
 import Expenses from "@/pages/Expenses";
 import Backup from "@/pages/Backup";
+import Opname from "@/pages/Opname";
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/customers" element={<Customers />} />
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/backup" element={<Backup />} />
+        <Route path="/opname" element={<Opname />} />
         <Route path="/sales" element={<Sales />} />
         <Route path="/users" element={<Users />} />
         <Route path="/settings" element={<Settings />} />

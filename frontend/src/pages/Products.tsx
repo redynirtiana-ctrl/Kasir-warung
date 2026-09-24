@@ -6,8 +6,11 @@ import { Plus, Pencil, Trash2, Barcode, Printer, Search, PackagePlus, Wand2, Fil
 import { apiDelete, apiGet, apiPost, apiPut, apiUpload } from "@/lib/api";
 import type { Category, ImportResult, ImportRow, Product, ProductIn, StockAdjustIn, User } from "@/lib/types";
 import { errMsg, num, rupiah, stockStatus } from "@/lib/format";
+import { todayLocal } from "@/lib/format";
 import { barcodeSvg, printLabels } from "@/lib/print";
 import { Button, buttonVariants } from "@/components/ui/button";
+import ExportButtons from "@/components/ExportButtons";
+import { promoActive } from "@/lib/pricing";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 const EMPTY: ProductIn = {
   sku: "", barcode: "", name: "", category_id: null, unit: "pcs", buy_price: 0, sell_price: 0,
   stock: 0, min_stock: 0, supplier: "", photo_url: "", active: true,
+  wholesale_tiers: [], promo_price: null, promo_start: null, promo_end: null,
 };
 
 function StatusBadge({ p }: { p: Product }) {
@@ -156,6 +160,7 @@ export default function Products() {
             <Button variant="outline" disabled={!selected.size} onClick={() => showLabels(selectedProducts, "Cetak Label Barcode")} data-testid="print-labels-button">
               <Printer /> Cetak Label ({selected.size})
             </Button>
+            <ExportButtons entity="products" />
             <Button variant="outline" onClick={() => { setImportRows(null); setImportOpen(true); }} data-testid="import-products-button"><FileUp /> Import Excel/CSV</Button>
             <Button onClick={() => openNew()} data-testid="add-product-button"><Plus /> Tambah Produk</Button>
           </div>
@@ -189,7 +194,11 @@ export default function Products() {
                 </TableCell>
                 <TableCell>{p.category_name ?? "-"}</TableCell>
                 <TableCell className="text-right">{rupiah(p.buy_price)}</TableCell>
-                <TableCell className="text-right font-semibold">{rupiah(p.sell_price)}</TableCell>
+                <TableCell className="text-right font-semibold">
+                  {rupiah(p.sell_price)}
+                  {promoActive(p, todayLocal()) && <div><Badge className="bg-rose-100 text-rose-800" data-testid={`product-promo-${p.sku}`}>Promo {rupiah(p.promo_price as number)}</Badge></div>}
+                  {p.wholesale_tiers?.length > 0 && <div className="text-[11px] font-normal text-sky-700">Grosir: {p.wholesale_tiers.map((t) => `≥${num(t.min_qty)} ${rupiah(t.price)}`).join(" · ")}</div>}
+                </TableCell>
                 <TableCell className="text-right font-mono" data-testid={`product-stock-${p.sku}`}>{num(p.stock)} {p.unit}</TableCell>
                 <TableCell><StatusBadge p={p} /></TableCell>
                 {isAdmin && (
@@ -242,6 +251,28 @@ export default function Products() {
               <div className="space-y-1"><Label>Stok minimum</Label><Input type="number" min={0} value={form.min_stock} onChange={(e) => set("min_stock", Number(e.target.value))} data-testid="product-min-stock-input" /></div>
               <div className="space-y-1"><Label>Supplier</Label><Input value={form.supplier} onChange={(e) => set("supplier", e.target.value)} data-testid="product-supplier-input" /></div>
               <div className="space-y-1"><Label>URL foto</Label><Input value={form.photo_url} onChange={(e) => set("photo_url", e.target.value)} data-testid="product-photo-input" /></div>
+              <div className="col-span-2 space-y-2 rounded-lg border border-sky-200 bg-sky-50/60 p-3">
+                <div className="flex items-center justify-between"><Label>Harga grosir (otomatis sesuai jumlah beli)</Label>
+                  <Button type="button" size="xs" variant="outline" onClick={() => set("wholesale_tiers", [...form.wholesale_tiers, { min_qty: (form.wholesale_tiers.at(-1)?.min_qty ?? 1) + 4, price: form.sell_price }])} data-testid="product-add-tier-button"><Plus /> Tingkat</Button>
+                </div>
+                {form.wholesale_tiers.map((t, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-sm">
+                    <span>Beli ≥</span>
+                    <Input type="number" min={2} value={t.min_qty} onChange={(e) => set("wholesale_tiers", form.wholesale_tiers.map((x, j) => j === idx ? { ...x, min_qty: Number(e.target.value) } : x))} className="h-8 w-20" data-testid={`product-tier-qty-${idx}`} />
+                    <span>{form.unit} → Rp</span>
+                    <Input type="number" min={1} value={t.price} onChange={(e) => set("wholesale_tiers", form.wholesale_tiers.map((x, j) => j === idx ? { ...x, price: Number(e.target.value) } : x))} className="h-8 w-28" data-testid={`product-tier-price-${idx}`} />
+                    <span className="text-muted-foreground">/ {form.unit}</span>
+                    <Button type="button" size="icon-xs" variant="ghost" onClick={() => set("wholesale_tiers", form.wholesale_tiers.filter((_, j) => j !== idx))} data-testid={`product-tier-remove-${idx}`}><Trash2 /></Button>
+                  </div>
+                ))}
+                {form.wholesale_tiers.length === 0 && <p className="text-xs text-muted-foreground">Belum ada harga grosir.</p>}
+              </div>
+              <div className="col-span-2 grid grid-cols-3 gap-2 rounded-lg border border-rose-200 bg-rose-50/60 p-3">
+                <div className="col-span-3"><Label>Harga promo berjangka (kosongkan jika tidak ada)</Label></div>
+                <div className="space-y-1"><span className="text-xs">Harga promo</span><Input type="number" min={0} value={form.promo_price ?? ""} onChange={(e) => set("promo_price", e.target.value === "" ? null : Number(e.target.value))} data-testid="product-promo-price-input" /></div>
+                <div className="space-y-1"><span className="text-xs">Mulai</span><Input type="date" value={form.promo_start ?? ""} onChange={(e) => set("promo_start", e.target.value || null)} data-testid="product-promo-start-input" /></div>
+                <div className="space-y-1"><span className="text-xs">Selesai</span><Input type="date" value={form.promo_end ?? ""} onChange={(e) => set("promo_end", e.target.value || null)} data-testid="product-promo-end-input" /></div>
+              </div>
               <label className="col-span-2 flex items-center gap-2 text-sm"><Checkbox checked={form.active} onCheckedChange={(v) => set("active", Boolean(v))} data-testid="product-active-checkbox" /> Produk aktif</label>
               {form.sell_price < form.buy_price && <p className="col-span-2 text-sm text-amber-700">Harga jual lebih rendah dari harga beli.</p>}
               <DialogFooter className="col-span-2">

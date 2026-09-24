@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import ExportButtons from "@/components/ExportButtons";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const todayLocal = () => {
@@ -70,9 +71,10 @@ export default function Purchases() {
           <h1 className="text-3xl font-bold tracking-tight">Pembelian Barang</h1>
           <p className="text-sm text-muted-foreground">Catat barang masuk dari supplier — stok otomatis bertambah</p>
         </div>
+        <div className="flex gap-2"><ExportButtons entity="purchases" />
         <Button onClick={() => { if (!sups.length) toast.info("Tambahkan supplier terlebih dahulu"); setForm({ supplier_id: sups[0]?.id ?? "", invoice_no: "", date: todayLocal(), items: [], note: "", update_buy_price: true }); }} data-testid="add-purchase-button">
           <Plus /> Catat Pembelian
-        </Button>
+        </Button></div>
       </div>
       <div className="flex items-center gap-2">
         <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)} className="h-9 rounded-md border bg-white px-2 text-sm" data-testid="purchase-filter-supplier">

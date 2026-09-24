@@ -70,6 +70,18 @@ class ProductIn(BaseModel):
     supplier: str = ""
     photo_url: str = ""
     active: bool = True
+    wholesale_tiers: list["WholesaleTier"] = []
+    promo_price: float | None = Field(default=None, ge=0)
+    promo_start: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    promo_end: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+class WholesaleTier(BaseModel):
+    min_qty: float = Field(gt=1)
+    price: float = Field(gt=0)
+
+
+ProductIn.model_rebuild()
 
 
 class Product(ProductIn):
@@ -117,6 +129,7 @@ class SaleIn(BaseModel):
     amount_paid: float = Field(ge=0)
     customer_id: str | None = None
     due_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    redeem_points: int = Field(default=0, ge=0)
 
 
 class SaleItem(BaseModel):
@@ -128,6 +141,8 @@ class SaleItem(BaseModel):
     buy_price: float
     discount: float
     subtotal: float
+    normal_price: float = 0
+    price_type: Literal["normal", "promo", "grosir"] = "normal"
 
 
 class Sale(BaseModel):
@@ -146,6 +161,9 @@ class Sale(BaseModel):
     void_reason: str | None = None
     customer_id: str | None = None
     customer_name: str | None = None
+    points_earned: int = 0
+    points_redeemed: int = 0
+    points_discount: float = 0
     date: str
     created_at: datetime
 
@@ -167,6 +185,10 @@ class Settings(BaseModel):
     payment_methods: list[str] = ["cash", "qris", "transfer", "debit", "kredit", "ewallet", "hutang"]
     owner_whatsapp: str = ""
     expense_categories: list[str] = ["Listrik", "Air", "Transport", "Plastik", "ATK", "Operasional", "Lainnya"]
+    loyalty_enabled: bool = True
+    points_per_amount: float = Field(default=10000, gt=0)  # belanja Rp X = 1 poin
+    point_value: float = Field(default=100, ge=0)  # 1 poin = Rp Y saat ditukar
+    min_redeem_points: int = Field(default=10, ge=0)
 
 
 # ---------- dashboard ----------
@@ -379,6 +401,7 @@ class CustomerIn(BaseModel):
 
 class Customer(CustomerIn):
     id: str = Field(default_factory=_id)
+    points: int = 0
     debt_remaining: float = 0
     transaction_count: int = 0
 
@@ -489,3 +512,34 @@ class MonthlyReport(BaseModel):
     expenses: float
     net: float
     transactions: int
+
+
+# ---------- stock opname ----------
+class OpnameItemIn(BaseModel):
+    product_id: str
+    counted: float = Field(ge=0)
+
+
+class OpnameIn(BaseModel):
+    items: list[OpnameItemIn] = Field(min_length=1, max_length=5000)
+    note: str = ""
+
+
+class OpnameLine(BaseModel):
+    product_id: str
+    sku: str
+    name: str
+    system_stock: float
+    counted: float
+    diff: float
+    value_diff: float
+
+
+class Opname(BaseModel):
+    id: str
+    lines: list[OpnameLine]
+    adjusted_count: int
+    value_diff: float
+    note: str
+    username: str
+    created_at: datetime

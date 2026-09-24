@@ -37,6 +37,11 @@ Versi saat ini mencetak lewat dialog print browser (CSS `@page` 58/80mm). Atur p
 Scanner USB (HID) mengetik kode + Enter ke kolom scan di halaman Kasir (fokus otomatis, F3 untuk kembali fokus).
 
 ## CHANGELOG
+### 1.5.0
+- Harga grosir bertingkat per produk (beli ≥ N → harga X) & harga promo berjangka (tanggal mulai/selesai). Harga dihitung ulang di server (`backend/lib/pricing.py`, mirror `frontend/src/lib/pricing.ts`); kasir menampilkan label PROMO / GROSIR, struk menandai harganya
+- Export Excel/CSV: produk, penjualan (ikut filter tanggal), pembelian, pelanggan, supplier — `GET /api/v1/export/{entity}.{xlsx|csv}` (admin)
+- Stok opname: scan barcode (1 scan = 1 unit) atau ketik jumlah, lihat selisih & nilai selisih, sesuaikan semua sekaligus (movement "opname"), riwayat opname
+- Poin pelanggan: dapat poin per belanja (default Rp 10.000 = 1 poin), tukar poin jadi diskon (default 1 poin = Rp 100, minimal 10 poin), diatur di Pengaturan; void mengembalikan poin
 ### 1.4.0
 - Backup database: manual, otomatis tiap malam 23:59 WIB (cron `daily-backup`, simpan 14 terakhir), unduh (.json.gz), restore dari daftar atau upload file (wajib ketik RESTORE; otomatis membuat backup "Sebelum restore"). File di `backend/backups/` (atur `BACKUP_DIR`)
 - Import produk Excel/CSV: template, preview + validasi (SKU/nama kosong, angka tidak valid, SKU dobel, barcode bentrok), SKU lama diperbarui, kategori baru dibuat otomatis, barcode kosong di-generate

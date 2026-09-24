@@ -144,3 +144,40 @@ def test_backup_import_monthly():
     assert "due_debts" in admin.get("/dashboard").json()
     admin.delete(f"/products/{p['id']}")
     admin.delete(f"/backups/{b['id']}")
+
+
+def test_pricing_points_opname_export():
+    admin = _login("admin", "admin123")
+    p = admin.post("/products", json={"sku": f"T-{uuid.uuid4().hex[:6]}", "name": "Grosir Test", "buy_price": 2000, "sell_price": 3000,
+                                      "stock": 50, "wholesale_tiers": [{"min_qty": 10, "price": 2500}, {"min_qty": 24, "price": 2300}],
+                                      "promo_price": 2800, "promo_start": "2020-01-01", "promo_end": "2099-12-31"}).json()
+    s1 = admin.post("/sales", json={"items": [{"product_id": p["id"], "qty": 2}], "payment_method": "qris", "amount_paid": 0}).json()
+    assert s1["items"][0]["price"] == 2800 and s1["items"][0]["price_type"] == "promo"
+    s2 = admin.post("/sales", json={"items": [{"product_id": p["id"], "qty": 12}], "payment_method": "qris", "amount_paid": 0}).json()
+    assert s2["items"][0]["price"] == 2500 and s2["items"][0]["price_type"] == "grosir"
+    # loyalty: 10000 per point, 1 point = 100
+    c = admin.post("/customers", json={"name": f"Pelanggan {uuid.uuid4().hex[:5]}"}).json()
+    s3 = admin.post("/sales", json={"items": [{"product_id": p["id"], "qty": 24}], "payment_method": "cash", "amount_paid": 60000,
+                                    "customer_id": c["id"]}).json()
+    assert s3["total"] == 55200 and s3["points_earned"] == 5
+    assert admin.post("/sales", json={"items": [{"product_id": p["id"], "qty": 1}], "payment_method": "cash", "amount_paid": 5000,
+                                      "customer_id": c["id"], "redeem_points": 99}).status_code == 400
+    admin.put("/settings", json={**admin.get("/settings").json(), "min_redeem_points": 5})
+    s4 = admin.post("/sales", json={"items": [{"product_id": p["id"], "qty": 1}], "payment_method": "cash", "amount_paid": 5000,
+                                    "customer_id": c["id"], "redeem_points": 5}).json()
+    assert s4["points_redeemed"] == 5 and s4["points_discount"] == 500 and s4["total"] == 2300
+    cust = [x for x in admin.get("/customers").json() if x["id"] == c["id"]][0]
+    assert cust["points"] == 0
+    admin.post(f"/sales/{s4['id']}/void", json={"reason": "test void poin"})
+    cust = [x for x in admin.get("/customers").json() if x["id"] == c["id"]][0]
+    assert cust["points"] == 5
+    admin.put("/settings", json={**admin.get("/settings").json(), "min_redeem_points": 10})
+    # opname: system stock now 50-2-12-24 = 12 -> counted 10
+    op = admin.post("/stock/opname", json={"items": [{"product_id": p["id"], "counted": 10}], "note": "test"}).json()
+    assert op["adjusted_count"] == 1 and op["lines"][0]["diff"] == -2 and op["value_diff"] == -4000
+    assert admin.get(f"/products/barcode/{p['barcode']}").json()["stock"] == 10
+    for e in ("products", "sales", "purchases", "customers", "suppliers"):
+        assert admin.get(f"/export/{e}.xlsx").content[:2] == b"PK"
+        assert admin.get(f"/export/{e}.csv").status_code == 200
+    kasir = _login("kasir", "kasir123")
+    assert kasir.get("/export/products.csv").status_code == 403

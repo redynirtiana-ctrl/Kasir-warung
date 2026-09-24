@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import ExportButtons from "@/components/ExportButtons";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default function Sales() {
@@ -54,6 +55,7 @@ export default function Sales() {
         <span className="text-muted-foreground">s/d</span>
         <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="w-40" data-testid="sales-end-input" />
         <Input placeholder="Cari nomor transaksi" value={q} onChange={(e) => setQ(e.target.value)} className="w-56" data-testid="sales-search-input" />
+        <ExportButtons entity="sales" start={start} end={end} />
         <Badge variant="secondary" className="h-8 px-3" data-testid="sales-count">{done.length} transaksi</Badge>
         <Badge className="h-8 bg-green-100 px-3 text-green-900" data-testid="sales-omzet">Omzet {rupiah(omzet)}</Badge>
       </div>

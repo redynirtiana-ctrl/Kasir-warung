@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import ExportButtons from "@/components/ExportButtons";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const EMPTY: SupplierIn = { name: "", contact_name: "", phone: "", address: "", note: "" };
@@ -45,7 +46,8 @@ export default function Suppliers() {
           <h1 className="text-3xl font-bold tracking-tight">Supplier</h1>
           <p className="text-sm text-muted-foreground">{sups.length} supplier</p>
         </div>
-        <Button onClick={() => { setEditing(null); setForm({ ...EMPTY }); }} data-testid="add-supplier-button"><Plus /> Tambah Supplier</Button>
+        <div className="flex gap-2"><ExportButtons entity="suppliers" />
+        <Button onClick={() => { setEditing(null); setForm({ ...EMPTY }); }} data-testid="add-supplier-button"><Plus /> Tambah Supplier</Button></div>
       </div>
       <div className="rounded-2xl border bg-white shadow-sm">
         <Table>

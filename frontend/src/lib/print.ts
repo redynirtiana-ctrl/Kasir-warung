@@ -40,7 +40,7 @@ export function receiptHtml(sale: Sale, s: Settings): string {
   const rows = sale.items
     .map(
       (i) => `<div class="b">${esc(i.name)}</div>
-<div class="r"><span>${num(i.qty)} x ${num(i.price)}${i.discount ? ` (-${num(i.discount)})` : ""}</span><span>${num(i.subtotal)}</span></div>`,
+<div class="r"><span>${num(i.qty)} x ${num(i.price)}${i.price_type === "promo" ? " PROMO" : i.price_type === "grosir" ? " GROSIR" : ""}${i.discount ? ` (-${num(i.discount)})` : ""}</span><span>${num(i.subtotal)}</span></div>`,
     )
     .join("");
   const line = (l: string, v: string, cls = "") => `<div class="r ${cls}"><span>${l}</span><span>${v}</span></div>`;
@@ -52,7 +52,7 @@ ${line("No", sale.invoice_no)}${line("Tanggal", new Date(sale.created_at).toLoca
 ${line("Subtotal", num(sale.subtotal))}${sale.discount ? line("Diskon", "-" + num(sale.discount)) : ""}${sale.tax ? line("Pajak", num(sale.tax)) : ""}
 ${line("TOTAL", num(sale.total), "b big")}
 ${line("Bayar (" + (PAYMENT_LABELS[sale.payment_method] ?? sale.payment_method) + ")", num(sale.amount_paid))}${sale.payment_method === "hutang" ? line("Sisa hutang", num(sale.total - sale.amount_paid), "b") : line("Kembalian", num(sale.change))}
-${sale.customer_name ? line("Pelanggan", esc(sale.customer_name)) : ""}
+${sale.customer_name ? line("Pelanggan", esc(sale.customer_name)) : ""}${sale.points_redeemed ? line(`Tukar ${sale.points_redeemed} poin`, "-" + num(sale.points_discount)) : ""}${sale.points_earned ? line("Poin didapat", "+" + num(sale.points_earned)) : ""}
 ${sale.status === "void" ? '<div class="c b">*** VOID ***</div>' : ""}
 <div class="hr"></div><div class="c">${esc(s.receipt_footer).replace(/\n/g, "<br>")}</div><div class="hr"></div>`;
 }

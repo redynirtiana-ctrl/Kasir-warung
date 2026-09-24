@@ -46,6 +46,15 @@ export interface ProductIn {
   supplier: string;
   photo_url: string;
   active: boolean;
+  wholesale_tiers: WholesaleTier[];
+  promo_price: number | null;
+  promo_start: string | null;
+  promo_end: string | null;
+}
+
+export interface WholesaleTier {
+  min_qty: number;
+  price: number;
 }
 
 export interface Product extends ProductIn {
@@ -78,6 +87,7 @@ export interface SaleIn {
   amount_paid: number;
   customer_id: string | null;
   due_date: string | null;
+  redeem_points: number;
 }
 
 export interface SaleItem {
@@ -89,6 +99,8 @@ export interface SaleItem {
   buy_price: number;
   discount: number;
   subtotal: number;
+  normal_price: number;
+  price_type: "normal" | "promo" | "grosir";
 }
 
 export interface Sale {
@@ -107,6 +119,9 @@ export interface Sale {
   void_reason: string | null;
   customer_id: string | null;
   customer_name: string | null;
+  points_earned: number;
+  points_redeemed: number;
+  points_discount: number;
   date: string;
   created_at: string;
 }
@@ -123,6 +138,10 @@ export interface Settings {
   payment_methods: string[];
   owner_whatsapp: string;
   expense_categories: string[];
+  loyalty_enabled: boolean;
+  points_per_amount: number;
+  point_value: number;
+  min_redeem_points: number;
 }
 
 export interface ChartPoint {
@@ -342,6 +361,7 @@ export interface CustomerIn {
 
 export interface Customer extends CustomerIn {
   id: string;
+  points: number;
   debt_remaining: number;
   transaction_count: number;
 }
@@ -439,4 +459,35 @@ export interface MonthlyReport {
   expenses: number;
   net: number;
   transactions: number;
+}
+
+// ---------- stock opname ----------
+export interface OpnameItemIn {
+  product_id: string;
+  counted: number;
+}
+
+export interface OpnameIn {
+  items: OpnameItemIn[];
+  note: string;
+}
+
+export interface OpnameLine {
+  product_id: string;
+  sku: string;
+  name: string;
+  system_stock: number;
+  counted: number;
+  diff: number;
+  value_diff: number;
+}
+
+export interface Opname {
+  id: string;
+  lines: OpnameLine[];
+  adjusted_count: number;
+  value_diff: number;
+  note: string;
+  username: string;
+  created_at: string;
 }

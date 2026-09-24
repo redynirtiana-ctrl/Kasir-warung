@@ -15,11 +15,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 function testSale(): Sale {
   return {
     id: "test", invoice_no: "TEST-PRINT", subtotal: 111000, discount: 0, tax: 0, total: 111000, payment_method: "cash",
-    amount_paid: 120000, change: 9000, cashier_name: "Test", status: "completed", void_reason: null, customer_id: null, customer_name: null,
+    amount_paid: 120000, change: 9000, cashier_name: "Test", status: "completed", void_reason: null, customer_id: null, customer_name: null, points_earned: 0, points_redeemed: 0, points_discount: 0,
     date: "", created_at: new Date().toISOString(),
     items: [
-      { product_id: "1", name: "Beras", unit: "karung", qty: 1, price: 75000, buy_price: 0, discount: 0, subtotal: 75000 },
-      { product_id: "2", name: "Minyak", unit: "pcs", qty: 2, price: 18000, buy_price: 0, discount: 0, subtotal: 36000 },
+      { product_id: "1", name: "Beras", unit: "karung", qty: 1, price: 75000, buy_price: 0, discount: 0, subtotal: 75000, normal_price: 0, price_type: "normal" },
+      { product_id: "2", name: "Minyak", unit: "pcs", qty: 2, price: 18000, buy_price: 0, discount: 0, subtotal: 36000, normal_price: 0, price_type: "normal" },
     ],
   };
 }
@@ -51,6 +51,12 @@ function SettingsForm({ initial }: { initial: SettingsData }) {
       <div className="space-y-1"><Label>Pajak (%)</Label><Input type="number" min={0} max={100} value={f.tax_percent} onChange={(e) => setF({ ...f, tax_percent: Number(e.target.value) })} data-testid="settings-tax-input" /></div>
       <div className="space-y-1"><Label>Prefix nomor transaksi</Label><Input value={f.invoice_prefix} onChange={(e) => setF({ ...f, invoice_prefix: e.target.value })} data-testid="settings-prefix-input" /></div>
       <div className="space-y-1 md:col-span-2"><Label>Footer struk</Label><Textarea value={f.receipt_footer} onChange={(e) => setF({ ...f, receipt_footer: e.target.value })} data-testid="settings-footer-input" /></div>
+      <div className="grid gap-3 rounded-xl border border-violet-200 bg-violet-50/60 p-4 md:col-span-2 md:grid-cols-4">
+        <label className="flex items-center gap-2 text-sm font-medium md:col-span-4"><Checkbox checked={f.loyalty_enabled} onCheckedChange={(v) => setF({ ...f, loyalty_enabled: Boolean(v) })} data-testid="settings-loyalty-checkbox" /> Poin pelanggan aktif</label>
+        <div className="space-y-1"><Label>Belanja Rp per 1 poin</Label><Input type="number" min={1} value={f.points_per_amount} onChange={(e) => setF({ ...f, points_per_amount: Number(e.target.value) })} data-testid="settings-points-per-amount-input" /></div>
+        <div className="space-y-1"><Label>Nilai 1 poin (Rp)</Label><Input type="number" min={0} value={f.point_value} onChange={(e) => setF({ ...f, point_value: Number(e.target.value) })} data-testid="settings-point-value-input" /></div>
+        <div className="space-y-1"><Label>Minimal tukar (poin)</Label><Input type="number" min={0} value={f.min_redeem_points} onChange={(e) => setF({ ...f, min_redeem_points: Number(e.target.value) })} data-testid="settings-min-redeem-input" /></div>
+      </div>
       <div className="space-y-2 md:col-span-2">
         <Label>Metode pembayaran aktif</Label>
         <div className="flex flex-wrap gap-4">

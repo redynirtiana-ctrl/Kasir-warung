@@ -36,6 +36,11 @@ users, categories, products (sku unique, barcode unique sparse), sales (invoice_
 - product import (admin): GET /products/import/template.xlsx, POST /products/import/preview (multipart xlsx/csv → ImportRow[] status new|update|error), POST /products/import {rows} → created/updated/skipped/new_categories
 - GET /reports/monthly?month=YYYY-MM → days[{omzet, modal, profit, expenses, net, transactions}] + totals; Dashboard.due_debts (open debts due ≤ today)
 - Frontend: /backup page, Products "Import Excel/CSV" dialog, Dashboard due-debts card, Reports tab "Laba Bulanan"; lib/api.ts apiUpload for multipart
+- Pricing: Product.wholesale_tiers[{min_qty>1, price}], promo_price + promo_start/promo_end (YYYY-MM-DD, inclusive). Server picks lowest of normal/active promo/best tier (lib/pricing.py); SaleItem.price_type normal|promo|grosir, normal_price
+- Loyalty: Settings.loyalty_enabled, points_per_amount (Rp per point, default 10000), point_value (Rp per point, 100), min_redeem_points (10). Customer.points. SaleIn.redeem_points → extra discount; Sale.points_earned/points_redeemed/points_discount; void reverses points (returns do not)
+- Stock opname (admin): GET/POST /stock/opname {items[{product_id, counted}], note} → sets stock, movement "opname", Opname{lines, adjusted_count, value_diff}. Frontend /opname keeps counts in localStorage until committed
+- Export (admin): GET /export/{products|sales|purchases|customers|suppliers}.{xlsx|csv}?start&end (sales/purchases date filter)
+- Demo: Mie Instan (MKN-001) grosir ≥10 = 3.200, ≥40 = 3.000; Minyak (SBK-002) promo 16.000 until 2026-10-31
 - reports (admin): GET /reports/daily?date, /reports/daily.pdf, /reports/daily.xlsx (file downloads), GET /reports/restock (stock ≤ min grouped by product.supplier, suggested = 2×min − stock)
 
 ## Frontend flows

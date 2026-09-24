@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import ExportButtons from "@/components/ExportButtons";
 import { cn } from "@/lib/utils";
 
 const EMPTY: CustomerIn = { name: "", whatsapp: "", address: "", note: "" };
@@ -64,7 +65,8 @@ export default function Customers() {
           <h1 className="text-3xl font-bold tracking-tight">Pelanggan & Hutang</h1>
           <p className="text-sm text-muted-foreground">Total piutang berjalan: <b data-testid="debt-total-open">{rupiah(customers.reduce((a, c) => a + c.debt_remaining, 0))}</b></p>
         </div>
-        <Button onClick={() => { setEditing(null); setForm({ ...EMPTY }); }} data-testid="add-customer-button"><Plus /> Tambah Pelanggan</Button>
+        <div className="flex gap-2"><ExportButtons entity="customers" />
+        <Button onClick={() => { setEditing(null); setForm({ ...EMPTY }); }} data-testid="add-customer-button"><Plus /> Tambah Pelanggan</Button></div>
       </div>
       <Tabs defaultValue="customers">
         <TabsList>
@@ -74,7 +76,7 @@ export default function Customers() {
         <TabsContent value="customers" className="mt-4">
           <div className="rounded-2xl border bg-white shadow-sm">
             <Table>
-              <TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>WhatsApp</TableHead><TableHead>Alamat</TableHead><TableHead className="text-right">Transaksi</TableHead><TableHead className="text-right">Sisa hutang</TableHead><TableHead /></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>WhatsApp</TableHead><TableHead>Alamat</TableHead><TableHead className="text-right">Transaksi</TableHead><TableHead className="text-right">Poin</TableHead><TableHead className="text-right">Sisa hutang</TableHead><TableHead /></TableRow></TableHeader>
               <TableBody>
                 {customers.map((c) => (
                   <TableRow key={c.id} data-testid={`customer-row-${c.name}`}>
@@ -82,6 +84,7 @@ export default function Customers() {
                     <TableCell className="font-mono text-sm">{c.whatsapp || "-"}</TableCell>
                     <TableCell className="max-w-48 truncate">{c.address || "-"}</TableCell>
                     <TableCell className="text-right">{c.transaction_count}</TableCell>
+                    <TableCell className="text-right"><Badge className="bg-violet-100 text-violet-800" data-testid={`customer-points-${c.name}`}>{c.points ?? 0} poin</Badge></TableCell>
                     <TableCell className={cn("text-right font-semibold", c.debt_remaining > 0 && "text-amber-700")} data-testid={`customer-debt-${c.name}`}>{rupiah(c.debt_remaining)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
