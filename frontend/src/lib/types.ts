@@ -204,3 +204,109 @@ export interface Purchase {
   username: string;
   created_at: string;
 }
+
+// ---------- returns ----------
+export interface ReturnItemIn {
+  product_id: string;
+  qty: number;
+}
+
+export interface ReturnIn {
+  type: "sale" | "purchase";
+  ref_id: string;
+  items: ReturnItemIn[];
+  reason: string;
+}
+
+export interface ReturnItem {
+  product_id: string;
+  name: string;
+  qty: number;
+  price: number;
+  subtotal: number;
+}
+
+export interface Return {
+  id: string;
+  return_no: string;
+  type: "sale" | "purchase";
+  ref_id: string;
+  ref_no: string;
+  items: ReturnItem[];
+  total: number;
+  reason: string;
+  username: string;
+  date: string;
+  created_at: string;
+}
+
+// ---------- shifts ----------
+export interface ShiftExpense {
+  amount: number;
+  note: string;
+  created_at: string;
+}
+
+export interface ShiftSummary {
+  transaction_count: number;
+  total_sales: number;
+  by_payment: Record<string, number>;
+  expenses_total: number;
+  refunds_cash: number;
+  expected_cash: number;
+}
+
+export interface Shift {
+  id: string;
+  user_id: string;
+  cashier_name: string;
+  status: "open" | "closed";
+  opening_cash: number;
+  opened_at: string;
+  closed_at: string | null;
+  expenses: ShiftExpense[];
+  summary: ShiftSummary | null;
+  actual_cash: number | null;
+  difference: number | null;
+  note: string;
+}
+
+// ---------- reports ----------
+export interface TopProduct {
+  name: string;
+  qty: number;
+  omzet: number;
+  profit: number;
+}
+
+export interface DailyReport {
+  date: string;
+  transaction_count: number;
+  items_sold: number;
+  omzet: number;
+  discount: number;
+  modal: number;
+  profit: number;
+  by_payment: Record<string, number>;
+  void_count: number;
+  sale_returns_total: number;
+  top_products: TopProduct[];
+}
+
+export interface RestockItem {
+  id: string;
+  sku: string;
+  name: string;
+  unit: string;
+  stock: number;
+  min_stock: number;
+  suggested_qty: number;
+  buy_price: number;
+  estimated_cost: number;
+}
+
+export interface RestockGroup {
+  supplier: string;
+  items: RestockItem[];
+  total_cost: number;
+}

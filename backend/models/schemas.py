@@ -242,3 +242,116 @@ class Purchase(BaseModel):
     note: str
     username: str
     created_at: datetime
+
+
+# ---------- returns ----------
+class ReturnItemIn(BaseModel):
+    product_id: str
+    qty: float = Field(gt=0)
+
+
+class ReturnIn(BaseModel):
+    type: Literal["sale", "purchase"]
+    ref_id: str
+    items: list[ReturnItemIn] = Field(min_length=1)
+    reason: str = Field(min_length=3, max_length=200)
+
+
+class ReturnItem(BaseModel):
+    product_id: str
+    name: str
+    qty: float
+    price: float
+    subtotal: float
+
+
+class Return(BaseModel):
+    id: str
+    return_no: str
+    type: Literal["sale", "purchase"]
+    ref_id: str
+    ref_no: str
+    items: list[ReturnItem]
+    total: float
+    reason: str
+    username: str
+    date: str
+    created_at: datetime
+
+
+# ---------- shifts ----------
+class ShiftOpenIn(BaseModel):
+    opening_cash: float = Field(ge=0)
+
+
+class ShiftExpenseIn(BaseModel):
+    amount: float = Field(gt=0)
+    note: str = Field(min_length=1, max_length=200)
+
+
+class ShiftCloseIn(BaseModel):
+    actual_cash: float = Field(ge=0)
+    note: str = ""
+
+
+class ShiftExpense(BaseModel):
+    amount: float
+    note: str
+    created_at: datetime
+
+
+class ShiftSummary(BaseModel):
+    transaction_count: int
+    total_sales: float
+    by_payment: dict[str, float]
+    expenses_total: float
+    refunds_cash: float
+    expected_cash: float
+
+
+class Shift(BaseModel):
+    id: str
+    user_id: str
+    cashier_name: str
+    status: Literal["open", "closed"]
+    opening_cash: float
+    opened_at: datetime
+    closed_at: datetime | None = None
+    expenses: list[ShiftExpense] = []
+    summary: ShiftSummary | None = None
+    actual_cash: float | None = None
+    difference: float | None = None
+    note: str = ""
+
+
+# ---------- reports ----------
+class DailyReport(BaseModel):
+    date: str
+    transaction_count: int
+    items_sold: float
+    omzet: float
+    discount: float
+    modal: float
+    profit: float
+    by_payment: dict[str, float]
+    void_count: int
+    sale_returns_total: float
+    top_products: list[dict]
+
+
+class RestockItem(BaseModel):
+    id: str
+    sku: str
+    name: str
+    unit: str
+    stock: float
+    min_stock: float
+    suggested_qty: float
+    buy_price: float
+    estimated_cost: float
+
+
+class RestockGroup(BaseModel):
+    supplier: str
+    items: list[RestockItem]
+    total_cost: float

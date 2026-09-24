@@ -21,8 +21,15 @@ users, categories, products (sku unique, barcode unique sparse), sales (invoice_
 
 - suppliers (admin): GET (with purchase_count, purchase_total), POST, PUT/{id}, DELETE/{id} (blocked if has purchases)
 - purchases (admin): GET (supplier_id, start, end), POST {supplier_id, invoice_no (unique per supplier, 409), date YYYY-MM-DD, items[{product_id, qty, buy_price}], note, update_buy_price} → stock += qty, movement "purchase", optional buy_price update + price_history
+- returns (admin): GET (type, ref_id), GET /returns/returned/{ref_id}, POST {type sale|purchase, ref_id, items[{product_id, qty}], reason} — qty ≤ original − already returned; sale return stock += qty (refund = line subtotal/qty), purchase return stock −= qty (needs stock); movement "return"; number RTR-YYYYMMDD-####
+- shifts (any user, own shift): GET /shifts/current (with live summary), POST /shifts/open {opening_cash}, POST /shifts/current/expenses {amount, note}, POST /shifts/close {actual_cash} → summary (by_payment, expenses, cash refunds, expected_cash = opening + cash sales − expenses − cash refunds), difference; GET /shifts (admin all, kasir own). Sales counted = cashier's completed sales since opened_at.
+- reports (admin): GET /reports/daily?date, /reports/daily.pdf, /reports/daily.xlsx (file downloads), GET /reports/restock (stock ≤ min grouped by product.supplier, suggested = 2×min − stock)
 
 ## Frontend flows
+- /returns (admin): tabs Retur Penjualan / Retur Pembelian, dialog: pick source trx, qty per line, reason.
+- /shifts (all): open shift, live summary, drawer expenses, close with actual cash → difference, print shift report (thermal), history.
+- /reports (admin): Laporan Harian (date, KPIs, detail, top-products chart, Cetak, PDF, Excel) + Saran Belanja (per supplier, print list).
+- /products: "Tambah Produk" auto-generates barcode immediately (preview visible); after saving a new product a label dialog opens to print it; per-row barcode button.
 - /purchases (admin): list + filter supplier, "Catat Pembelian" dialog (supplier, invoice, date, product picker, qty/price, total, update-price checkbox), detail view.
 - /suppliers (admin): table, add/edit/delete, purchase history dialog.
 - /login (demo chips) → admin → `/`, kasir → `/pos`
@@ -34,4 +41,4 @@ users, categories, products (sku unique, barcode unique sparse), sales (invoice_
 7 categories; 10 products (e.g. Beras Premium 5 Kg barcode 8991001000011 Rp75.000 stok 20; Mie Instan 8991001000059 Rp3.500; Telur Ayam stok 4 min 5 = menipis; Teh Celup stok 0 = habis).
 
 ## Not yet built (later phases)
-Returns module (sales & purchase returns), shifts, expenses, customers & debt, nightly reports/PDF/Excel export, import, backup/restore, ESC/POS print bridge, photo upload (URL field only).
+Customers & debt, expenses module (separate from shift drawer expenses), nightly auto-generated reports, import/export, backup/restore, ESC/POS print bridge, photo upload (URL field only).

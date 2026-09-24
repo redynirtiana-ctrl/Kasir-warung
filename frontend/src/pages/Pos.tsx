@@ -146,6 +146,8 @@ export default function Pos() {
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["shift"] });
+      qc.invalidateQueries({ queryKey: ["reports"] });
     },
     onError: (e) => toast.error(errMsg(e)),
   });

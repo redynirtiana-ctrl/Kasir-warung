@@ -10,6 +10,9 @@ import Users from "@/pages/Users";
 import Settings from "@/pages/Settings";
 import Purchases from "@/pages/Purchases";
 import Suppliers from "@/pages/Suppliers";
+import Returns from "@/pages/Returns";
+import Reports from "@/pages/Reports";
+import Shifts from "@/pages/Shifts";
 
 export default function App() {
   return (
@@ -22,6 +25,9 @@ export default function App() {
         <Route path="/categories" element={<Categories />} />
         <Route path="/purchases" element={<Purchases />} />
         <Route path="/suppliers" element={<Suppliers />} />
+        <Route path="/returns" element={<Returns />} />
+        <Route path="/reports" element={<Reports />} />
+        <Route path="/shifts" element={<Shifts />} />
         <Route path="/sales" element={<Sales />} />
         <Route path="/users" element={<Users />} />
         <Route path="/settings" element={<Settings />} />

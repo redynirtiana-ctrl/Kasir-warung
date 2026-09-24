@@ -37,6 +37,12 @@ Versi saat ini mencetak lewat dialog print browser (CSS `@page` 58/80mm). Atur p
 Scanner USB (HID) mengetik kode + Enter ke kolom scan di halaman Kasir (fokus otomatis, F3 untuk kembali fokus).
 
 ## CHANGELOG
+### 1.2.0
+- Retur penjualan & retur pembelian (stok otomatis disesuaikan, validasi qty sisa, nomor RTR)
+- Shift kasir: buka shift + modal awal, pengeluaran laci, tutup shift dengan cash aktual & selisih, cetak laporan shift, riwayat
+- Laporan harian: omzet, diskon, modal, keuntungan, per metode bayar, void, retur, produk terlaris; cetak, download PDF (reportlab) & Excel (openpyxl)
+- Saran belanja: barang stok menipis dikelompokkan per supplier + estimasi biaya, bisa dicetak
+- Produk: barcode langsung di-generate saat tambah produk, dialog cetak label muncul setelah simpan, tombol barcode per produk
 ### 1.1.0 (Phase 4 — sebagian)
 - Modul Supplier: CRUD (nama, kontak, telepon, alamat, catatan), jumlah & total pembelian, riwayat pembelian per supplier
 - Modul Pembelian: supplier, no. invoice (unik per supplier), tanggal, banyak produk (qty, harga beli), total

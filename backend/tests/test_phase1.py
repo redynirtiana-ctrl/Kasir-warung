@@ -65,3 +65,38 @@ def test_purchase_increases_stock():
     kasir = _login("kasir", "kasir123")
     assert kasir.get("/purchases").status_code == 403
     admin.delete(f"/products/{p['id']}")
+
+
+def test_returns_shift_reports():
+    admin = _login("admin", "admin123")
+    sup = admin.post("/suppliers", json={"name": f"Sup {uuid.uuid4().hex[:6]}"}).json()
+    p = admin.post("/products", json={"sku": f"T-{uuid.uuid4().hex[:6]}", "name": "Retur Test", "buy_price": 1000,
+                                      "sell_price": 2000, "stock": 5, "min_stock": 10}).json()
+    bc = p["barcode"]
+    pur = admin.post("/purchases", json={"supplier_id": sup["id"], "invoice_no": "R1", "date": "2026-09-24",
+                                         "items": [{"product_id": p["id"], "qty": 5, "buy_price": 1000}]}).json()
+    # shift
+    admin.post("/shifts/close", json={"actual_cash": 0})  # close leftover if any
+    assert admin.post("/shifts/open", json={"opening_cash": 50000}).status_code == 200
+    sale = admin.post("/sales", json={"items": [{"product_id": p["id"], "qty": 4}], "payment_method": "cash", "amount_paid": 10000}).json()
+    assert admin.get(f"/products/barcode/{bc}").json()["stock"] == 6
+    # sale return 2 -> stock 8; over-return rejected
+    r = admin.post("/returns", json={"type": "sale", "ref_id": sale["id"], "items": [{"product_id": p["id"], "qty": 2}], "reason": "rusak"})
+    assert r.status_code == 200 and r.json()["total"] == 4000
+    assert admin.post("/returns", json={"type": "sale", "ref_id": sale["id"], "items": [{"product_id": p["id"], "qty": 3}], "reason": "lagi"}).status_code == 400
+    assert admin.get(f"/products/barcode/{bc}").json()["stock"] == 8
+    # purchase return 3 -> stock 5
+    assert admin.post("/returns", json={"type": "purchase", "ref_id": pur["id"], "items": [{"product_id": p["id"], "qty": 3}], "reason": "expired"}).status_code == 200
+    assert admin.get(f"/products/barcode/{bc}").json()["stock"] == 5
+    # shift summary: 50000 + 8000 cash - 4000 refund = 54000
+    cur = admin.get("/shifts/current").json()
+    assert cur["summary"]["expected_cash"] == 54000
+    closed = admin.post("/shifts/close", json={"actual_cash": 53000}).json()
+    assert closed["difference"] == -1000 and closed["status"] == "closed"
+    # reports
+    d = admin.get(f"/reports/daily?date={sale['date']}").json()
+    assert d["omzet"] >= 8000 and "cash" in d["by_payment"]
+    assert admin.get(f"/reports/daily.pdf?date={sale['date']}").content[:4] == b"%PDF"
+    assert admin.get(f"/reports/daily.xlsx?date={sale['date']}").content[:2] == b"PK"
+    groups = admin.get("/reports/restock").json()
+    assert any(i["id"] == p["id"] for g in groups for i in g["items"])

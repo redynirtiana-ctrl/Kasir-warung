@@ -38,6 +38,8 @@ export default function Products() {
   const [form, setForm] = useState<ProductIn | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [labelOpen, setLabelOpen] = useState(false);
+  const [labelItems, setLabelItems] = useState<Product[]>([]);
+  const [labelTitle, setLabelTitle] = useState("Cetak Label Barcode");
   const [labelSize, setLabelSize] = useState({ widthMm: 50, heightMm: 30, copies: 1 });
   const [adjust, setAdjust] = useState<{ product: Product; body: StockAdjustIn } | null>(null);
 
@@ -51,6 +53,7 @@ export default function Products() {
     if (nb !== null && isAdmin) {
       setEditing(null);
       setForm({ ...EMPTY, barcode: nb });
+      if (!nb) void apiGet<{ barcode: string }>("/v1/barcode/generate").then(({ barcode }) => setForm((f) => (f ? { ...f, barcode } : f))).catch(() => undefined);
       setParams({}, { replace: true });
     }
   }, [params, setParams, isAdmin]);
@@ -73,6 +76,7 @@ export default function Products() {
       toast.success(`Produk ${p.name} disimpan`);
       setForm(null);
       invalidate();
+      if (!editing) showLabels([p], `Barcode produk baru — ${p.name}`);
     },
     onError: (e) => toast.error(errMsg(e)),
   });
@@ -96,6 +100,18 @@ export default function Products() {
     }
   };
 
+  const openNew = (barcode = "") => {
+    setEditing(null);
+    setForm({ ...EMPTY, barcode });
+    if (!barcode) void genBarcode();
+  };
+
+  function showLabels(items: Product[], title: string) {
+    setLabelItems(items);
+    setLabelTitle(title);
+    setLabelOpen(true);
+  }
+
   const selectedProducts = useMemo(() => products.filter((p) => selected.has(p.id)), [products, selected]);
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const set = <K extends keyof ProductIn>(k: K, v: ProductIn[K]) => setForm((f) => (f ? { ...f, [k]: v } : f));
@@ -109,10 +125,10 @@ export default function Products() {
         </div>
         {isAdmin && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" disabled={!selected.size} onClick={() => setLabelOpen(true)} data-testid="print-labels-button">
+            <Button variant="outline" disabled={!selected.size} onClick={() => showLabels(selectedProducts, "Cetak Label Barcode")} data-testid="print-labels-button">
               <Printer /> Cetak Label ({selected.size})
             </Button>
-            <Button onClick={() => { setEditing(null); setForm({ ...EMPTY }); }} data-testid="add-product-button"><Plus /> Tambah Produk</Button>
+            <Button onClick={() => openNew()} data-testid="add-product-button"><Plus /> Tambah Produk</Button>
           </div>
         )}
       </div>
@@ -150,6 +166,7 @@ export default function Products() {
                 {isAdmin && (
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
+                      <Button size="icon-sm" variant="ghost" title="Barcode" onClick={() => showLabels([p], `Barcode — ${p.name}`)} data-testid={`product-barcode-${p.sku}`}><Barcode /></Button>
                       <Button size="icon-sm" variant="ghost" title="Stok" onClick={() => setAdjust({ product: p, body: { product_id: p.id, type: "stock_in", qty: 0, note: "" } })} data-testid={`product-adjust-${p.sku}`}><PackagePlus /></Button>
                       <Button size="icon-sm" variant="ghost" title="Edit" onClick={() => { setEditing(p); setForm({ ...p }); }} data-testid={`product-edit-${p.sku}`}><Pencil /></Button>
                       <Button size="icon-sm" variant="ghost" title="Hapus" onClick={() => confirm(`Hapus ${p.name}?`) && del.mutate(p.id)} data-testid={`product-delete-${p.sku}`}><Trash2 className="text-rose-600" /></Button>
@@ -227,15 +244,15 @@ export default function Products() {
 
       <Dialog open={labelOpen} onOpenChange={setLabelOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle><Barcode className="mr-2 inline size-5" />Cetak Label Barcode</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle><Barcode className="mr-2 inline size-5" />{labelTitle}</DialogTitle></DialogHeader>
           <div className="grid grid-cols-3 gap-2">
             <div className="space-y-1"><Label>Lebar (mm)</Label><Input type="number" value={labelSize.widthMm} onChange={(e) => setLabelSize({ ...labelSize, widthMm: Number(e.target.value) })} data-testid="label-width-input" /></div>
             <div className="space-y-1"><Label>Tinggi (mm)</Label><Input type="number" value={labelSize.heightMm} onChange={(e) => setLabelSize({ ...labelSize, heightMm: Number(e.target.value) })} data-testid="label-height-input" /></div>
             <div className="space-y-1"><Label>Salinan</Label><Input type="number" min={1} value={labelSize.copies} onChange={(e) => setLabelSize({ ...labelSize, copies: Math.max(1, Number(e.target.value)) })} data-testid="label-copies-input" /></div>
           </div>
           <div className="flex max-h-72 flex-wrap gap-2 overflow-y-auto" data-testid="label-preview">
-            {selectedProducts.map((p) => (
-              <div key={p.id} className="flex flex-col items-center rounded border border-dashed p-1 text-center" style={{ width: `${labelSize.widthMm * 3}px` }}>
+            {labelItems.map((p) => (
+              <div key={p.id} data-testid={`label-item-${p.sku}`} className="flex flex-col items-center rounded border border-dashed p-1 text-center" style={{ width: `${labelSize.widthMm * 3}px` }}>
                 <div className="truncate text-[10px] font-bold">{p.name}</div>
                 <div className="[&_svg]:h-auto [&_svg]:max-w-full" dangerouslySetInnerHTML={{ __html: barcodeSvg(p.barcode ?? "", { height: 30, width: 1.2, fontSize: 10 }) }} />
                 <div className="text-xs font-bold">{rupiah(p.sell_price)}</div>
@@ -243,7 +260,7 @@ export default function Products() {
             ))}
           </div>
           <DialogFooter>
-            <Button onClick={() => printLabels(selectedProducts.map((product) => ({ product, copies: labelSize.copies })), labelSize)} data-testid="label-print-button"><Printer /> Cetak</Button>
+            <Button onClick={() => printLabels(labelItems.map((product) => ({ product, copies: labelSize.copies })), labelSize)} data-testid="label-print-button"><Printer /> Cetak Label</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

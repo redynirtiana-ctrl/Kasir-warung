@@ -41,6 +41,12 @@ INDEXES: dict[str, list[IndexModel]] = {
     "purchases": [IndexModel([("id", ASCENDING)], name="id", unique=True),
                   IndexModel([("supplier_id", ASCENDING), ("date", DESCENDING)], name="supplier_date"),
                   IndexModel([("date", DESCENDING)], name="date_desc")],
+    "returns": [IndexModel([("id", ASCENDING)], name="id", unique=True),
+                IndexModel([("ref_id", ASCENDING)], name="ref_id"),
+                IndexModel([("type", ASCENDING), ("date", ASCENDING)], name="type_date")],
+    "shifts": [IndexModel([("id", ASCENDING)], name="id", unique=True),
+               IndexModel([("user_id", ASCENDING), ("status", ASCENDING)], name="user_status"),
+               IndexModel([("opened_at", DESCENDING)], name="opened_desc")],
 }
 
 
