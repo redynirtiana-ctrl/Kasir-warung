@@ -218,6 +218,7 @@ class Settings(BaseModel):
     min_redeem_points: int = Field(default=10, ge=0)
     max_cashier_discount_percent: float = Field(default=10, ge=0, le=100)  # above this a kasir needs an admin PIN
     expiry_warning_days: int = Field(default=30, ge=1, le=365)
+    morning_summary_enabled: bool = True  # auto-send at 07:00 WIB via Fonnte (needs token)
 
 
 # ---------- dashboard ----------
@@ -591,3 +592,33 @@ class Breakdown(BaseModel):
     end: str
     by_cashier: list[BreakdownRow]
     by_category: list[BreakdownRow]
+
+
+# ---------- WhatsApp (Fonnte) ----------
+class FonnteTokenIn(BaseModel):
+    token: str = Field(max_length=200)  # empty string = remove
+
+
+class FonnteStatus(BaseModel):
+    configured: bool
+    source: Literal["database", "env", "none"]
+    owner_whatsapp: str
+
+
+class NotificationLog(BaseModel):
+    kind: str
+    source: str
+    target: str
+    status: bool
+    reason: str = ""
+    created_at: datetime
+
+
+class MorningSummary(BaseModel):
+    date: str
+    text: str
+    due_debts: int
+    due_total: float
+    expiring: int
+    out_of_stock: int
+    low_stock: int

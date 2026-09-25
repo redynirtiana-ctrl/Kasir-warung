@@ -271,3 +271,21 @@ def test_admin_pin_discount_limit_expiry():
     assert exp and exp[0]["days_left"] == 0
     assert admin.post(f"/batches/{exp[0]['id']}/dismiss").status_code == 200
     assert not [x for x in admin.get("/dashboard").json()["expiring"] if x["sku"] == p["sku"]]
+
+
+def test_morning_summary_and_fonnte():
+    admin = _login("admin", "admin123")
+    s = admin.get("/notifications/morning-summary").json()
+    assert "RINGKASAN PAGI" in s["text"] and "Hutang jatuh tempo" in s["text"]
+    st = admin.get("/integrations/fonnte").json()
+    if not st["configured"]:
+        r = admin.post("/notifications/morning-summary/send").json()
+        assert r["status"] is False and "Token" in r["reason"]
+    # invalid token -> Fonnte rejects, error surfaced (no crash); then removed again
+    if st["source"] != "database":
+        assert admin.put("/integrations/fonnte", json={"token": "invalid-test-token"}).json()["configured"] is True
+        r = admin.post("/integrations/fonnte/test").json()
+        assert r["status"] is False and r["reason"]
+        assert admin.put("/integrations/fonnte", json={"token": ""}).json()["source"] in ("none", "env")
+    assert admin.get("/notifications/logs").status_code == 200
+    assert _login("kasir", "kasir123").get("/integrations/fonnte").status_code == 403

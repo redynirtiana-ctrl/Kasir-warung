@@ -2,11 +2,11 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useOutletContext } from "react-router-dom";
 import { toast } from "sonner";
-import { AlertTriangle, BellRing, CalendarClock, PackageX, Receipt, TrendingUp, Wallet, ShoppingBag } from "lucide-react";
+import { AlertTriangle, BellRing, CalendarClock, MessageCircle, Sunrise, PackageX, Receipt, TrendingUp, Wallet, ShoppingBag } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiGet, apiPost } from "@/lib/api";
-import type { Dashboard as DashboardData, User } from "@/lib/types";
-import { num, PAYMENT_LABELS, rupiah, fmtDateTime, todayLocal } from "@/lib/format";
+import type { Dashboard as DashboardData, FonnteStatus, MorningSummary, NotificationLog, Settings, User } from "@/lib/types";
+import { num, PAYMENT_LABELS, rupiah, fmtDateTime, todayLocal, waLink } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,16 @@ export default function Dashboard() {
     mutationFn: (id: string) => apiPost(`/v1/batches/${id}/dismiss`),
     onSuccess: () => { toast.success("Ditandai sudah ditangani"); qc.invalidateQueries({ queryKey: ["dashboard"] }); },
   });
+  const isAdmin = me?.role === "admin";
+  const { data: morning } = useQuery({ queryKey: ["morning-summary"], queryFn: () => apiGet<MorningSummary>("/v1/notifications/morning-summary"), enabled: isAdmin });
+  const { data: fonnte } = useQuery({ queryKey: ["fonnte"], queryFn: () => apiGet<FonnteStatus>("/v1/integrations/fonnte"), enabled: isAdmin });
+  const sendNow = useMutation({
+    mutationFn: () => apiPost<NotificationLog>("/v1/notifications/morning-summary/send"),
+    onSuccess: (r) => (r.status ? toast.success("Ringkasan pagi terkirim lewat Fonnte") : toast.error(`Gagal kirim: ${r.reason}`)),
+  });
+  const [showMorning, setShowMorning] = useState(false);
+  const { data: storeSettings } = useQuery({ queryKey: ["settings"], queryFn: () => apiGet<Settings>("/v1/settings"), enabled: isAdmin });
+  const settingsAuto = storeSettings?.morning_summary_enabled ?? true;
   const [range, setRange] = useState<string>("today");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -68,6 +78,25 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {isAdmin && morning && (
+        <div className="rounded-2xl border border-emerald-300 bg-gradient-to-r from-emerald-50 to-amber-50 p-5" data-testid="morning-summary-card">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="flex items-center gap-2 font-semibold text-emerald-900"><Sunrise className="size-4" /> RINGKASAN PAGI</h3>
+              <p className="text-sm text-emerald-900/80" data-testid="morning-summary-stats">{morning.due_debts} hutang jatuh tempo ({rupiah(morning.due_total)}) · {morning.expiring} barang kedaluwarsa · {morning.out_of_stock} stok habis</p>
+              <p className="text-xs text-muted-foreground">{fonnte?.configured ? (settingsAuto ? "Terkirim otomatis ke WhatsApp setiap 07:00 WIB via Fonnte" : "Kirim otomatis dimatikan di Pengaturan") : "Kirim otomatis 07:00 belum aktif — isi token Fonnte di Pengaturan"}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button className="text-sm font-medium text-emerald-800 hover:underline" onClick={() => setShowMorning((v) => !v)} data-testid="morning-summary-toggle">{showMorning ? "Tutup" : "Lihat pesan"}</button>
+              <a className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#25D366] px-3 text-sm font-medium text-white hover:bg-[#1ebe5b]" target="_blank" rel="noreferrer"
+                href={waLink(fonnte?.owner_whatsapp ?? "", morning.text)} data-testid="morning-summary-wa-link"><MessageCircle className="size-4" /> Kirim WhatsApp</a>
+              {fonnte?.configured && <button className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-600 px-3 text-sm font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50" disabled={sendNow.isPending} onClick={() => sendNow.mutate()} data-testid="morning-summary-fonnte-button">Kirim via Fonnte</button>}
+            </div>
+          </div>
+          {showMorning && <pre className="mt-3 whitespace-pre-wrap rounded-lg bg-white/80 p-3 font-sans text-sm" data-testid="morning-summary-text">{morning.text}</pre>}
+        </div>
+      )}
 
       {d && d.due_debts.length > 0 && (
         <div className="rounded-2xl border border-orange-300 bg-orange-50 p-5" data-testid="due-debts-card">

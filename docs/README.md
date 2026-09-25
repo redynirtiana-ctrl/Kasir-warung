@@ -37,6 +37,12 @@ Versi saat ini mencetak lewat dialog print browser (CSS `@page` 58/80mm). Atur p
 Scanner USB (HID) mengetik kode + Enter ke kolom scan di halaman Kasir (fokus otomatis, F3 untuk kembali fokus).
 
 ## CHANGELOG
+### 1.9.0
+- Ringkasan pagi WhatsApp: hutang jatuh tempo (hari ini & lewat), barang hampir/sudah kedaluwarsa, stok habis/menipis, penjualan kemarin
+- Dashboard (admin): kartu "Ringkasan Pagi" + tombol Kirim WhatsApp (wa.me, satu klik) + "Kirim via Fonnte"
+- Otomatis 07:00 WIB via Fonnte: cron `morning-whatsapp-summary` → `POST /api/v1/cron/morning-summary`; adapter `backend/integrations/fonnte.py` (form-data ke https://api.fonnte.com/send, header Authorization = token)
+- Token Fonnte diisi di Pengaturan → "WhatsApp Otomatis (Fonnte)" (disimpan di koleksi `secrets`, tidak pernah dikirim ke browser; fallback env `FONNTE_TOKEN`), tombol Kirim Tes, riwayat pengiriman, sakelar aktif/nonaktif
+- Cara dapat token: login fonnte.com → Device → tambah device → scan QR dengan WhatsApp pengirim (nomor toko) → klik Token → salin
 ### 1.8.0
 - Batas diskon kasir (Pengaturan, default 10%): diskon manual (per barang + transaksi, poin tidak dihitung) di atas batas → wajib PIN admin
 - PIN persetujuan admin: admin atur PIN 4–6 angka di Pengguna → "Atur PIN Persetujuan Saya" (wajib password). Di kasir muncul dialog PIN untuk diskon di atas batas, diskon oleh kasir tanpa izin diskon, dan void oleh kasir tanpa izin void. PIN salah dibatasi (rate limit) & semua persetujuan/penolakan tercatat di audit log

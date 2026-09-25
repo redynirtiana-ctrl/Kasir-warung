@@ -15,3 +15,11 @@ crons:
     endpoint: "{{BASE_URL}}/api/v1/cron/backup"
     method: POST
     enabled: true
+  - name: morning-whatsapp-summary
+    description: "Sends the morning WhatsApp summary (due debts, expiring items) to the owner via Fonnte at 07:00 WIB"
+    cron: "0 7 * * *"
+    timezone: "Asia/Jakarta"
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    endpoint: "{{BASE_URL}}/api/v1/cron/morning-summary"
+    method: POST
+    enabled: true

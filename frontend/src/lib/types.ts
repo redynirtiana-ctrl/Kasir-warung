@@ -169,6 +169,7 @@ export interface Settings {
   min_redeem_points: number;
   max_cashier_discount_percent: number;
   expiry_warning_days: number;
+  morning_summary_enabled: boolean;
 }
 
 export interface ChartPoint {
@@ -560,4 +561,30 @@ export interface DisplayState {
   total: number;
   customer: { name: string; points: number } | null;
   thanks: { total: number; paid: number; change: number; points_earned: number } | null;
+}
+
+// ---------- WhatsApp (Fonnte) ----------
+export interface FonnteStatus {
+  configured: boolean;
+  source: "database" | "env" | "none";
+  owner_whatsapp: string;
+}
+
+export interface NotificationLog {
+  kind: string;
+  source: string;
+  target: string;
+  status: boolean;
+  reason: string;
+  created_at: string;
+}
+
+export interface MorningSummary {
+  date: string;
+  text: string;
+  due_debts: number;
+  due_total: number;
+  expiring: number;
+  out_of_stock: number;
+  low_stock: number;
 }

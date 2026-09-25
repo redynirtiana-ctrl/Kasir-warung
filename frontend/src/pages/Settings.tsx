@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Printer } from "lucide-react";
-import { apiGet, apiPut } from "@/lib/api";
-import type { Sale, Settings as SettingsData } from "@/lib/types";
-import { errMsg, PAYMENT_LABELS } from "@/lib/format";
+import { Printer, Send } from "lucide-react";
+import { apiGet, apiPost, apiPut } from "@/lib/api";
+import type { FonnteStatus, NotificationLog, Sale, Settings as SettingsData } from "@/lib/types";
+import { errMsg, fmtDateTime, PAYMENT_LABELS } from "@/lib/format";
 import { printReceipt } from "@/lib/print";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,7 @@ function SettingsForm({ initial }: { initial: SettingsData }) {
       </div>
       <div className="space-y-1"><Label>WhatsApp pemilik (tujuan laporan)</Label><Input value={f.owner_whatsapp} onChange={(e) => setF({ ...f, owner_whatsapp: e.target.value })} placeholder="08xxxxxxxxxx" data-testid="settings-owner-wa-input" /></div>
       <div className="space-y-1"><Label>Kategori pengeluaran (pisahkan koma)</Label><Input value={f.expense_categories.join(", ")} onChange={(e) => setF({ ...f, expense_categories: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })} data-testid="settings-expense-categories-input" /></div>
+      <label className="flex items-center gap-2 text-sm md:col-span-2"><Checkbox checked={f.morning_summary_enabled} onCheckedChange={(v) => setF({ ...f, morning_summary_enabled: Boolean(v) })} data-testid="settings-morning-summary-checkbox" /> Kirim ringkasan pagi otomatis ke WhatsApp pemilik (07:00 WIB, via Fonnte)</label>
       <div className="space-y-1"><Label>Batas diskon kasir tanpa PIN admin (%)</Label><Input type="number" min={0} max={100} value={f.max_cashier_discount_percent} onChange={(e) => setF({ ...f, max_cashier_discount_percent: Number(e.target.value) })} data-testid="settings-max-discount-input" /></div>
       <div className="space-y-1"><Label>Peringatan kedaluwarsa (hari sebelumnya)</Label><Input type="number" min={1} max={365} value={f.expiry_warning_days} onChange={(e) => setF({ ...f, expiry_warning_days: Number(e.target.value) })} data-testid="settings-expiry-days-input" /></div>
       <div className="space-y-1"><Label>Pajak (%)</Label><Input type="number" min={0} max={100} value={f.tax_percent} onChange={(e) => setF({ ...f, tax_percent: Number(e.target.value) })} data-testid="settings-tax-input" /></div>
@@ -75,6 +76,54 @@ function SettingsForm({ initial }: { initial: SettingsData }) {
   );
 }
 
+function FonnteSection() {
+  const qc = useQueryClient();
+  const [token, setToken] = useState("");
+  const { data: st } = useQuery({ queryKey: ["fonnte"], queryFn: () => apiGet<FonnteStatus>("/v1/integrations/fonnte") });
+  const { data: logs = [] } = useQuery({ queryKey: ["notification-logs"], queryFn: () => apiGet<NotificationLog[]>("/v1/notifications/logs") });
+  const saveToken = useMutation({
+    mutationFn: (t: string) => apiPut<FonnteStatus>("/v1/integrations/fonnte", { token: t }),
+    onSuccess: (r) => { toast.success(r.configured ? "Token Fonnte disimpan" : "Token Fonnte dihapus"); setToken(""); qc.invalidateQueries({ queryKey: ["fonnte"] }); },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+  const test = useMutation({
+    mutationFn: () => apiPost<NotificationLog>("/v1/integrations/fonnte/test"),
+    onSuccess: (r) => { r.status ? toast.success("Pesan tes terkirim — cek WhatsApp pemilik") : toast.error(`Gagal: ${r.reason}`); qc.invalidateQueries({ queryKey: ["notification-logs"] }); },
+  });
+  return (
+    <div className="max-w-3xl space-y-4 rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm" data-testid="fonnte-section">
+      <div>
+        <h2 className="text-lg font-semibold">WhatsApp Otomatis (Fonnte)</h2>
+        <p className="text-sm text-muted-foreground">Ringkasan pagi (hutang jatuh tempo, barang kedaluwarsa, stok) dikirim otomatis setiap 07:00 WIB ke nomor WhatsApp pemilik. Token: fonnte.com → Device → Token.</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className={st?.configured ? "rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-800" : "rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-900"} data-testid="fonnte-status">
+          {st?.configured ? `Token aktif${st.source === "env" ? " (dari .env)" : ""}` : "Token belum diatur"}
+        </span>
+        <span className="text-muted-foreground">Tujuan: {st?.owner_whatsapp || "— isi WhatsApp pemilik di atas"}</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Input type="password" placeholder={st?.configured ? "Ganti token…" : "Tempel token device Fonnte"} value={token} onChange={(e) => setToken(e.target.value)} className="max-w-sm" data-testid="fonnte-token-input" />
+        <Button disabled={!token.trim() || saveToken.isPending} onClick={() => saveToken.mutate(token)} data-testid="fonnte-save-button">Simpan Token</Button>
+        {st?.source === "database" && <Button variant="outline" onClick={() => saveToken.mutate("")} data-testid="fonnte-remove-button">Hapus</Button>}
+        <Button variant="outline" disabled={!st?.configured || test.isPending} onClick={() => test.mutate()} data-testid="fonnte-test-button"><Send /> Kirim Tes</Button>
+      </div>
+      <div>
+        <h3 className="mb-1 text-sm font-medium">Riwayat pengiriman</h3>
+        <ul className="divide-y rounded-lg border text-sm" data-testid="notification-logs">
+          {logs.map((l, i) => (
+            <li key={i} className="flex justify-between gap-2 px-3 py-2">
+              <span>{l.kind === "morning_summary" ? "Ringkasan pagi" : "Tes"} · {l.source === "cron" ? "otomatis" : "manual"} · <span className="text-muted-foreground">{fmtDateTime(l.created_at)}</span></span>
+              <span className={l.status ? "text-emerald-700" : "text-rose-700"}>{l.status ? "Terkirim" : l.reason}</span>
+            </li>
+          ))}
+          {logs.length === 0 && <li className="px-3 py-2 text-muted-foreground">Belum ada pengiriman</li>}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { data } = useQuery({ queryKey: ["settings"], queryFn: () => apiGet<SettingsData>("/v1/settings") });
   return (
@@ -84,6 +133,7 @@ export default function Settings() {
         <p className="text-sm text-muted-foreground">Struk dicetak lewat dialog print browser ke printer thermal (58/80mm).</p>
       </div>
       {data ? <SettingsForm key={JSON.stringify(data)} initial={data} /> : <div className="h-64 max-w-3xl animate-pulse rounded-2xl bg-muted" />}
+      <FonnteSection />
     </div>
   );
 }
