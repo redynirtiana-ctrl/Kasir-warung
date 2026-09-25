@@ -622,3 +622,23 @@ class MorningSummary(BaseModel):
     expiring: int
     out_of_stock: int
     low_stock: int
+
+
+# ---------- struk via WhatsApp ----------
+class WaReceiptPreview(BaseModel):
+    phone: str  # member's WhatsApp (editable by kasir before sending)
+    customer_name: str | None = None
+    text: str
+    fonnte_configured: bool
+
+
+class WaReceiptIn(BaseModel):
+    phone: str = Field(min_length=8, max_length=20, pattern=r"^[0-9+\-\s]+$")
+
+
+class WaReceiptResult(BaseModel):
+    sent: bool  # True = delivered via Fonnte; False = use wa_link fallback
+    via: Literal["fonnte", "link"]
+    target: str
+    reason: str = ""
+    wa_link: str

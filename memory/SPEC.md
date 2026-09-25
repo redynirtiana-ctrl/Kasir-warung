@@ -69,3 +69,8 @@ users, categories, products (sku unique, barcode unique sparse), sales (invoice_
 
 ## Not yet built (later phases)
 Customers & debt, expenses module (separate from shift drawer expenses), nightly auto-generated reports, import/export, backup/restore, ESC/POS print bridge, photo upload (URL field only).
+
+## Struk via WhatsApp
+- Tombol "Kirim WA" ada di dialog struk kasir (setelah transaksi), di tiap baris Penjualan, dan di dialog detail penjualan. Semuanya membuka `WaReceiptDialog`.
+- `GET /api/v1/sales/{id}/whatsapp` → WaReceiptPreview {phone (WA member, bisa diedit), customer_name, text (struk teks), fonnte_configured}
+- `POST /api/v1/sales/{id}/whatsapp` {phone} → WaReceiptResult {sent, via: fonnte|link, target, reason, wa_link}. Kalau Fonnte tidak diatur atau gagal: sent=false, lalu frontend membuka wa_link. Dicatat di notification_logs (kind=receipt) dan di audit log.

@@ -9,10 +9,13 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from integrations.fonnte import FonnteError, get_token, send_whatsapp
-from lib.auth import audit, require_admin
+from urllib.parse import quote
+
+from integrations.fonnte import FonnteError, get_token, normalize, send_whatsapp
+from lib.auth import audit, get_current_user, require_admin
 from lib.db import db
-from models.schemas import FonnteStatus, FonnteTokenIn, MorningSummary, NotificationLog
+from models.schemas import (FonnteStatus, FonnteTokenIn, MorningSummary, NotificationLog, WaReceiptIn,
+                            WaReceiptPreview, WaReceiptResult)
 from routers.dashboard import expiring_list
 from routers.sales import get_settings, store_tz
 
@@ -109,6 +112,90 @@ async def set_fonnte_token(body: FonnteTokenIn, admin: dict = Depends(require_ad
 async def fonnte_test(admin: dict = Depends(require_admin)):
     settings = await get_settings()
     return await _send("test", "manual", f"Tes WhatsApp dari {settings.store_name} berhasil ✅")
+
+
+PAY_LABELS = {"cash": "Cash", "qris": "QRIS", "transfer": "Transfer", "debit": "Debit", "kredit": "Kredit",
+              "ewallet": "E-wallet", "hutang": "Hutang"}
+
+
+def _n(v: float) -> str:
+    return f"{round(v):,}".replace(",", ".")
+
+
+async def receipt_text(sale: dict) -> str:
+    s = await get_settings()
+    when = sale["created_at"]
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    hr = "--------------------------------"
+    lines = [f"*{s.store_name}*", s.address, f"WA: {s.whatsapp}", hr, "*STRUK DIGITAL*",
+             f"No      : {sale['invoice_no']}", f"Tanggal : {when.astimezone(store_tz()).strftime('%d-%m-%Y %H:%M')}",
+             f"Kasir   : {sale['cashier_name']}"]
+    if sale.get("customer_name"):
+        lines.append(f"Member  : {sale['customer_name']}")
+    lines.append(hr)
+    for i in sale["items"]:
+        tag = " (PROMO)" if i.get("price_type") == "promo" else " (GROSIR)" if i.get("price_type") == "grosir" else ""
+        disc = f" -{_n(i['discount'])}" if i.get("discount") else ""
+        lines += [i["name"], f"  {i['qty']:g} {i['unit']} x {_n(i['price'])}{tag}{disc} = {_n(i['subtotal'])}"]
+    lines += [hr, f"Subtotal : {_n(sale['subtotal'])}"]
+    if sale.get("discount"):
+        lines.append(f"Diskon   : -{_n(sale['discount'])}")
+    if sale.get("tax"):
+        lines.append(f"Pajak    : {_n(sale['tax'])}")
+    lines += [f"*TOTAL   : Rp {_n(sale['total'])}*",
+              f"Bayar ({PAY_LABELS.get(sale['payment_method'], sale['payment_method'])}) : {_n(sale['amount_paid'])}"]
+    if sale["payment_method"] == "hutang":
+        lines.append(f"Sisa hutang : {_n(sale['total'] - sale['amount_paid'])}")
+    else:
+        lines.append(f"Kembalian : {_n(sale.get('change', 0))}")
+    if sale.get("points_redeemed"):
+        lines.append(f"Tukar {sale['points_redeemed']} poin : -{_n(sale.get('points_discount', 0))}")
+    if sale.get("points_earned"):
+        lines.append(f"Poin didapat : +{sale['points_earned']}")
+    if sale.get("status") == "void":
+        lines.append("*** VOID ***")
+    lines += [hr, s.receipt_footer]
+    return "\n".join(lines)
+
+
+async def _sale_or_404(id: str) -> dict:
+    sale = await db.sales.find_one({"id": id}, {"_id": 0})
+    if not sale:
+        raise HTTPException(404, "Transaksi tidak ditemukan")
+    return sale
+
+
+@router.get("/sales/{id}/whatsapp", response_model=WaReceiptPreview)
+async def wa_receipt_preview(id: str, _: dict = Depends(get_current_user)):
+    sale = await _sale_or_404(id)
+    phone = ""
+    if sale.get("customer_id"):
+        c = await db.customers.find_one({"id": sale["customer_id"]}, {"_id": 0, "whatsapp": 1})
+        phone = (c or {}).get("whatsapp", "")
+    token, _src = await get_token()
+    return WaReceiptPreview(phone=phone, customer_name=sale.get("customer_name"), text=await receipt_text(sale),
+                            fonnte_configured=bool(token))
+
+
+@router.post("/sales/{id}/whatsapp", response_model=WaReceiptResult)
+async def wa_receipt_send(id: str, body: WaReceiptIn, user: dict = Depends(get_current_user)):
+    sale = await _sale_or_404(id)
+    text = await receipt_text(sale)
+    target = normalize(body.phone)
+    link = f"https://wa.me/{target}?text={quote(text)}"
+    token, _src = await get_token()
+    if not token:
+        ok, reason, via = False, "Token Fonnte belum diatur — gunakan tautan WhatsApp", "link"
+    else:
+        try:
+            await send_whatsapp(target, text)
+            ok, reason, via = True, "", "fonnte"
+        except FonnteError as e:
+            ok, reason, via = False, str(e), "link"
+    await _log("receipt", "fonnte" if token else "link", target, ok, reason)
+    await audit(user, "whatsapp_receipt", f"{sale['invoice_no']} -> {target} ok={ok}")
+    return WaReceiptResult(sent=ok, via=via, target=target, reason=reason, wa_link=link)
 
 
 async def _morning_job(run_id: str) -> None:

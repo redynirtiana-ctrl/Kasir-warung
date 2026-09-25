@@ -4,7 +4,8 @@ import { useOutletContext } from "react-router-dom";
 import { can } from "@/lib/types";
 import PinDialog, { needsPin } from "@/components/PinDialog";
 import { toast } from "sonner";
-import { Printer, Ban, Eye } from "lucide-react";
+import { Printer, Ban, Eye, MessageCircle } from "lucide-react";
+import WaReceiptDialog from "@/components/WaReceiptDialog";
 import { apiGet, apiPost } from "@/lib/api";
 import type { Sale, Settings, User } from "@/lib/types";
 import { errMsg, fmtDateTime, num, PAYMENT_LABELS, rupiah } from "@/lib/format";
@@ -23,6 +24,7 @@ export default function Sales() {
   const [end, setEnd] = useState("");
   const [q, setQ] = useState("");
   const [view, setView] = useState<Sale | null>(null);
+  const [waSale, setWaSale] = useState<Sale | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const { data: sales = [] } = useQuery({
     queryKey: ["sales", start, end, q],
@@ -83,6 +85,7 @@ export default function Sales() {
                 <TableCell className="text-right">
                   <Button size="icon-sm" variant="ghost" onClick={() => setView(s)} data-testid={`sale-view-${s.invoice_no}`}><Eye /></Button>
                   <Button size="icon-sm" variant="ghost" onClick={() => settings && printReceipt(s, settings)} data-testid={`sale-print-${s.invoice_no}`}><Printer /></Button>
+                  <Button size="icon-sm" variant="ghost" className="text-emerald-700" title="Kirim struk via WhatsApp" onClick={() => setWaSale(s)} data-testid={`sale-whatsapp-${s.invoice_no}`}><MessageCircle /></Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -105,10 +108,11 @@ export default function Sales() {
                 </Button>
               </div>
             )}
-            <DialogFooter><Button onClick={() => printReceipt(view, settings)} data-testid="sale-dialog-print-button"><Printer /> Cetak Ulang</Button></DialogFooter>
+            <DialogFooter className="gap-2"><Button variant="outline" onClick={() => setWaSale(view)} data-testid="sale-dialog-whatsapp-button"><MessageCircle /> Kirim WA</Button><Button onClick={() => printReceipt(view, settings)} data-testid="sale-dialog-print-button"><Printer /> Cetak Ulang</Button></DialogFooter>
           </DialogContent>
         )}
       </Dialog>
+      <WaReceiptDialog sale={waSale} onClose={() => setWaSale(null)} />
       <PinDialog reason={pinReason} pending={voidM.isPending} onClose={() => setPinReason(null)} onSubmit={(pin) => view && voidM.mutate({ s: view, pin })} />
     </div>
   );

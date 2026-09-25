@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ScanBarcode, Search, Trash2, Minus, Plus, PauseCircle, FolderOpen, Printer, CreditCard, X, MonitorSmartphone, IdCard } from "lucide-react";
+import { ScanBarcode, Search, Trash2, Minus, Plus, PauseCircle, FolderOpen, Printer, CreditCard, X, MonitorSmartphone, IdCard, MessageCircle } from "lucide-react";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { effectivePrice, promoActive } from "@/lib/pricing";
 import type { DisplayState } from "@/lib/types";
 import { can } from "@/lib/types";
 import PinDialog, { needsPin } from "@/components/PinDialog";
+import WaReceiptDialog from "@/components/WaReceiptDialog";
 import type { Category, Customer, PaymentMethod, Product, Sale, SaleIn, Settings } from "@/lib/types";
 import { todayLocal, errMsg, num, PAYMENT_LABELS, rupiah, stockStatus } from "@/lib/format";
 import { printReceipt, receiptHtml } from "@/lib/print";
@@ -75,6 +76,7 @@ export default function Pos() {
   const lastPayload = useRef<SaleIn | null>(null);
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [waSale, setWaSale] = useState<Sale | null>(null);
   const scanRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -506,11 +508,14 @@ export default function Pos() {
             <div className="max-h-96 overflow-y-auto rounded-lg border border-dashed bg-amber-50 p-3 font-mono text-xs [&_.b]:font-bold [&_.big]:text-sm [&_.c]:text-center [&_.hr]:my-1 [&_.hr]:border-t [&_.hr]:border-dashed [&_.hr]:border-stone-400 [&_.r]:flex [&_.r]:justify-between"
               data-testid="receipt-preview" dangerouslySetInnerHTML={{ __html: receiptHtml(lastSale, settings) }} />
             <DialogFooter className="gap-2">
+              <Button variant="outline" className="border-emerald-600 text-emerald-700 hover:bg-emerald-50" onClick={() => setWaSale(lastSale)} data-testid="receipt-whatsapp-button"><MessageCircle /> Kirim WA</Button>
               <Button onClick={printLast} data-testid="receipt-print-button"><Printer /> Cetak Struk (F12)</Button>
             </DialogFooter>
           </DialogContent>
         )}
       </Dialog>
+
+      <WaReceiptDialog sale={waSale} onClose={() => setWaSale(null)} />
 
       {/* Held transactions */}
       <Dialog open={heldOpen} onOpenChange={setHeldOpen}>

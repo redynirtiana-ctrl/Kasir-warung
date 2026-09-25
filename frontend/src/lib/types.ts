@@ -588,3 +588,23 @@ export interface MorningSummary {
   out_of_stock: number;
   low_stock: number;
 }
+
+// ---------- struk via WhatsApp ----------
+export interface WaReceiptPreview {
+  phone: string;
+  customer_name: string | null;
+  text: string;
+  fonnte_configured: boolean;
+}
+
+export interface WaReceiptIn {
+  phone: string;
+}
+
+export interface WaReceiptResult {
+  sent: boolean;
+  via: "fonnte" | "link";
+  target: string;
+  reason: string;
+  wa_link: string;
+}
