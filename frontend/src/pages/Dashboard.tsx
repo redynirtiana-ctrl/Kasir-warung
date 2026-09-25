@@ -10,6 +10,7 @@ import { num, PAYMENT_LABELS, rupiah, fmtDateTime, todayLocal, waLink } from "@/
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import PromoBroadcast from "@/components/PromoBroadcast";
 
 const RANGES = [
   ["today", "Hari ini"],
@@ -97,6 +98,8 @@ export default function Dashboard() {
           {showMorning && <pre className="mt-3 whitespace-pre-wrap rounded-lg bg-white/80 p-3 font-sans text-sm" data-testid="morning-summary-text">{morning.text}</pre>}
         </div>
       )}
+
+      {isAdmin && <PromoBroadcast />}
 
       {d && d.due_debts.length > 0 && (
         <div className="rounded-2xl border border-orange-300 bg-orange-50 p-5" data-testid="due-debts-card">

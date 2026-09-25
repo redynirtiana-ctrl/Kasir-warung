@@ -679,3 +679,52 @@ class Store(StoreIn):
     sales_count: int = 0
     sales_total: float = 0
     created_at: datetime = Field(default_factory=_now)
+
+
+# ---------- promo member via WhatsApp ----------
+class PromoProduct(BaseModel):
+    name: str
+    unit: str
+    normal_price: float
+    promo_price: float
+    promo_end: str | None = None
+
+
+class PromoRecipient(BaseModel):
+    customer_id: str
+    name: str
+    whatsapp: str
+
+
+class PromoResult(BaseModel):
+    name: str
+    target: str
+    ok: bool
+    reason: str = ""
+
+
+class PromoCampaign(BaseModel):
+    id: str
+    text: str
+    total: int
+    sent: int = 0
+    failed: int = 0
+    status: Literal["running", "done", "link"]  # link = kasir opens wa.me one by one (no Fonnte)
+    username: str
+    created_at: datetime
+    finished_at: datetime | None = None
+    results: list[PromoResult] = []
+
+
+class PromoDraft(BaseModel):
+    text: str
+    promo_products: list[PromoProduct]
+    recipients: list[PromoRecipient]
+    fonnte_configured: bool
+    sent_this_week: bool
+    last_campaign: PromoCampaign | None = None
+
+
+class PromoSendIn(BaseModel):
+    text: str = Field(min_length=10, max_length=3000)
+    mode: Literal["fonnte", "link"] = "fonnte"

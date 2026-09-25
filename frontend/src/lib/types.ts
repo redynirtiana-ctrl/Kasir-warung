@@ -645,3 +645,52 @@ export interface Store extends StoreIn {
   sales_total: number;
   created_at: string;
 }
+
+// ---------- promo member via WhatsApp ----------
+export interface PromoProduct {
+  name: string;
+  unit: string;
+  normal_price: number;
+  promo_price: number;
+  promo_end: string | null;
+}
+
+export interface PromoRecipient {
+  customer_id: string;
+  name: string;
+  whatsapp: string;
+}
+
+export interface PromoResult {
+  name: string;
+  target: string;
+  ok: boolean;
+  reason: string;
+}
+
+export interface PromoCampaign {
+  id: string;
+  text: string;
+  total: number;
+  sent: number;
+  failed: number;
+  status: "running" | "done" | "link";
+  username: string;
+  created_at: string;
+  finished_at: string | null;
+  results: PromoResult[];
+}
+
+export interface PromoDraft {
+  text: string;
+  promo_products: PromoProduct[];
+  recipients: PromoRecipient[];
+  fonnte_configured: boolean;
+  sent_this_week: boolean;
+  last_campaign: PromoCampaign | null;
+}
+
+export interface PromoSendIn {
+  text: string;
+  mode: "fonnte" | "link";
+}
