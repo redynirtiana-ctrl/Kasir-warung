@@ -14,7 +14,7 @@ from urllib.parse import quote
 from integrations.fonnte import FonnteError, get_token, normalize, send_whatsapp
 from lib.auth import audit, get_current_user, require_admin, require_perm
 from lib.db import db
-from models.schemas import (DueDebtGroup, FonnteStatus, FonnteTokenIn, MorningSummary, NotificationLog, WaReceiptIn,
+from models.schemas import (Customer, DueDebtGroup, FonnteStatus, FonnteTokenIn, MorningSummary, NotificationLog, WaReceiptIn,
                             WaReceiptPreview, WaReceiptResult)
 from routers.dashboard import expiring_list
 from routers.sales import get_settings, store_tz
@@ -286,15 +286,89 @@ async def send_debt_reminder(id: str, body: WaReceiptIn, user: dict = Depends(re
     return WaReceiptResult(sent=ok, via=via, target=target, reason=reason, wa_link=link)
 
 
+# ---------- ucapan ulang tahun member ----------
+def _birthday_keys() -> list[str]:
+    today = datetime.now(store_tz()).date()
+    keys = [today.strftime("%m-%d")]
+    leap = today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0)
+    if keys[0] == "02-28" and not leap:
+        keys.append("02-29")  # members born 29 Feb are greeted on 28 Feb in non-leap years
+    return keys
+
+
+async def birthday_text(customer: dict) -> str:
+    s = await get_settings()
+    return "\n".join([
+        f"🎉 *Selamat Ulang Tahun, {customer['name']}!* 🎂", "",
+        f"Keluarga besar *{s.store_name}* mengucapkan selamat ulang tahun.",
+        "Semoga panjang umur, sehat selalu, rezeki lancar, dan bahagia bersama keluarga tercinta. 🤲", "",
+        "Terima kasih sudah menjadi member setia kami. Ditunggu kunjungannya di warung ya! 🙏", "",
+        f"Salam hangat,\n{s.store_name}"])
+
+
+@router.get("/customers/birthdays-today", response_model=list[Customer])
+async def birthdays_today(_: dict = Depends(get_current_user)):
+    docs = await db.customers.find({"birthday": {"$in": _birthday_keys()}}, {"_id": 0}).sort("name", 1).to_list(500)
+    return [Customer(**d) for d in docs]
+
+
+@router.post("/customers/{id}/birthday-greeting", response_model=WaReceiptResult)
+async def send_birthday_greeting(id: str, body: WaReceiptIn, user: dict = Depends(get_current_user)):
+    customer = await db.customers.find_one({"id": id}, {"_id": 0})
+    if not customer:
+        raise HTTPException(404, "Pelanggan tidak ditemukan")
+    text = await birthday_text(customer)
+    target = normalize(body.phone)
+    token, _src = await get_token()
+    if not token:
+        ok, reason, via = False, "Token Fonnte belum diatur — gunakan tautan WhatsApp", "link"
+    else:
+        try:
+            await send_whatsapp(target, text)
+            ok, reason, via = True, "", "fonnte"
+        except FonnteError as e:
+            ok, reason, via = False, str(e), "link"
+    # Opening wa.me counts as greeted too, so the 07:00 job won't double-send.
+    await db.customers.update_one({"id": id}, {"$set": {"birthday_greeted_year": datetime.now(store_tz()).year}})
+    await _log("birthday", "fonnte" if token else "link", target, ok, reason)
+    await audit(user, "whatsapp_birthday", f"{customer['name']} -> {target} ok={ok}")
+    return WaReceiptResult(sent=ok, via=via, target=target, reason=reason, wa_link=f"https://wa.me/{target}?text={quote(text)}")
+
+
+async def send_birthday_greetings_auto() -> None:
+    settings = await get_settings()
+    if not settings.birthday_greeting_enabled:
+        return
+    token, _src = await get_token()
+    year = datetime.now(store_tz()).year
+    async for c in db.customers.find({"birthday": {"$in": _birthday_keys()}, "whatsapp": {"$nin": ["", None]},
+                                      "birthday_greeted_year": {"$ne": year}}, {"_id": 0}):
+        target = normalize(c["whatsapp"])
+        if not token:
+            await _log("birthday", "cron", target, False, "Token Fonnte belum diatur")
+            continue
+        try:
+            await send_whatsapp(target, await birthday_text(c))
+            ok, reason = True, ""
+            await db.customers.update_one({"id": c["id"]}, {"$set": {"birthday_greeted_year": year}})
+        except FonnteError as e:
+            ok, reason = False, str(e)
+        await _log("birthday", "cron", target, ok, reason)
+
+
 async def _morning_job(run_id: str) -> None:
     try:
         settings = await get_settings()
         if not settings.morning_summary_enabled:
             await _log("morning_summary", "cron", settings.owner_whatsapp, False, "Dinonaktifkan di Pengaturan")
-            return
-        await _send("morning_summary", "cron", (await build_summary()).text)
+        else:
+            await _send("morning_summary", "cron", (await build_summary()).text)
     except Exception:
         logger.exception("morning summary failed (run %s)", run_id)
+    try:
+        await send_birthday_greetings_auto()
+    except Exception:
+        logger.exception("birthday greetings failed (run %s)", run_id)
 
 
 @cron_router.post("/morning-summary", status_code=202)

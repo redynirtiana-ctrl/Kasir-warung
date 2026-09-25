@@ -175,6 +175,7 @@ export interface Settings {
   expiry_warning_days: number;
   morning_summary_enabled: boolean;
   auto_wa_receipt: boolean;
+  birthday_greeting_enabled: boolean;
 }
 
 export interface ChartPoint {
@@ -405,10 +406,12 @@ export interface CustomerIn {
   whatsapp: string;
   address: string;
   note: string;
+  birthday: string; // "MM-DD" or ""
 }
 
 export interface Customer extends CustomerIn {
   id: string;
+  birthday_greeted_year: number;
   member_code: string;
   points: number;
   debt_remaining: number;

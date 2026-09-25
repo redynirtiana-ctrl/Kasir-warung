@@ -88,3 +88,9 @@ Customers & debt, expenses module (separate from shift drawer expenses), nightly
 - Migrasi 007_add_store_id (lib/stores.py, jalan saat startup, idempotent, dicatat di collection `migrations`): menandai products/sales/purchases/stock_movements lama dengan store_id="main".
 - Data baru diberi store_id = current_store_id(user) (user.store_id kalau ada, kalau tidak "main").
 - `/api/v1/stores` untuk GET, POST, PUT, DELETE (cabang utama tidak bisa dihapus atau dinonaktifkan; cabang yang sudah punya data tidak bisa dihapus). Halaman /stores menu "Cabang" (khusus admin).
+
+## Ucapan ulang tahun member
+- Customer.birthday "MM-DD" (tanpa tahun, opsional, divalidasi regex). Customer.birthday_greeted_year dipakai supaya ucapan tidak terkirim dua kali dalam setahun. Form pelanggan memakai pilihan Tanggal + Bulan.
+- `GET /api/v1/customers/birthdays-today` → Customer[] (member yang lahir 29 Feb diucapkan pada 28 Feb di tahun non-kabisat). `POST /api/v1/customers/{id}/birthday-greeting` {phone} → WaReceiptResult (Fonnte, cadangan wa.me); setelah dikirim, birthday_greeted_year diisi.
+- Otomatis: job pagi (cron /cron/morning-summary, 07:00 WIB) memanggil send_birthday_greetings_auto() kalau Settings.birthday_greeting_enabled aktif (bawaan true), berjalan terpisah dari ringkasan pagi. Tanpa poin bonus.
+- UI: panel "Ulang tahun hari ini" di tab Pelanggan, ikon kue + tanggal lahir di baris pelanggan, dan saklar di Pengaturan.

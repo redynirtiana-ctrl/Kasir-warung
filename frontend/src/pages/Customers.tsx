@@ -4,7 +4,7 @@ import { can } from "@/lib/types";
 import type { User } from "@/lib/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, History, HandCoins, MessageCircle, IdCard, BellRing, Send } from "lucide-react";
+import { Plus, Pencil, Trash2, History, HandCoins, MessageCircle, IdCard, BellRing, Send, Cake } from "lucide-react";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import type { Customer, CustomerIn, Debt, DueDebtGroup, Sale, Settings, WaReceiptResult } from "@/lib/types";
 import { errMsg, fmtDateTime, PAYMENT_LABELS, rupiah, todayLocal, waLink } from "@/lib/format";
@@ -19,7 +19,9 @@ import ExportButtons from "@/components/ExportButtons";
 import { printMemberCards } from "@/lib/print";
 import { cn } from "@/lib/utils";
 
-const EMPTY: CustomerIn = { name: "", whatsapp: "", address: "", note: "" };
+const EMPTY: CustomerIn = { name: "", whatsapp: "", address: "", note: "", birthday: "" };
+const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+const fmtBirthday = (b: string) => (b ? `${Number(b.slice(3))} ${MONTHS[Number(b.slice(0, 2)) - 1]}` : "");
 
 export default function Customers() {
   const qc = useQueryClient();
@@ -68,6 +70,18 @@ export default function Customers() {
     onError: (e) => toast.error(errMsg(e)),
   });
 
+  const { data: birthdays = [] } = useQuery({ queryKey: ["customers", "birthdays-today"], queryFn: () => apiGet<Customer[]>("/v1/customers/birthdays-today") });
+  const thisYear = new Date().getFullYear();
+  const greet = useMutation({
+    mutationFn: (c: Customer) => apiPost<WaReceiptResult>(`/v1/customers/${c.id}/birthday-greeting`, { phone: c.whatsapp }),
+    onSuccess: (r, c) => {
+      qc.invalidateQueries({ queryKey: ["customers"] });
+      if (r.sent) toast.success(`Ucapan ulang tahun terkirim ke ${c.name}`);
+      else { toast.warning(`${r.reason}. Membuka WhatsApp…`); window.open(r.wa_link, "_blank", "noopener"); }
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
   const totalOpen = debts.filter((d) => d.status === "open").reduce((a, d) => a + d.remaining, 0);
   const remind = (d: Debt) => {
     const c = custById.get(d.customer_id);
@@ -91,14 +105,39 @@ export default function Customers() {
           <TabsTrigger value="customers" data-testid="tab-customers">Pelanggan</TabsTrigger>
           <TabsTrigger value="debts" data-testid="tab-debts">Piutang</TabsTrigger>
         </TabsList>
-        <TabsContent value="customers" className="mt-4">
+        <TabsContent value="customers" className="mt-4 space-y-3">
+          {birthdays.length > 0 && (
+            <div className="rounded-2xl border border-pink-200 bg-pink-50/70 p-4 shadow-sm" data-testid="birthday-panel">
+              <div className="mb-2 flex items-center gap-2">
+                <Cake className="size-5 text-pink-600" />
+                <h3 className="font-semibold text-pink-900">Ulang tahun hari ini ({birthdays.length} member)</h3>
+              </div>
+              <div className="divide-y divide-pink-200/70">
+                {birthdays.map((c) => {
+                  const greeted = c.birthday_greeted_year === thisYear;
+                  return (
+                    <div key={c.id} className="flex flex-wrap items-center gap-3 py-2" data-testid={`birthday-row-${c.name}`}>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium">{c.name} {greeted && <Badge className="ml-1 bg-emerald-100 text-emerald-800" data-testid={`birthday-greeted-${c.name}`}>Sudah diucapkan</Badge>}</div>
+                        <div className="text-xs text-muted-foreground">{c.member_code} · {c.whatsapp || "tanpa nomor WA"}</div>
+                      </div>
+                      <Button size="sm" className="bg-pink-600 hover:bg-pink-700" disabled={!c.whatsapp || (greet.isPending && greet.variables?.id === c.id)}
+                        onClick={() => greet.mutate(c)} data-testid={`birthday-greet-${c.name}`}>
+                        <Send /> {greeted ? "Kirim Ulang" : "Kirim Ucapan"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="rounded-2xl border bg-white shadow-sm">
             <Table>
               <TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>Kode member</TableHead><TableHead>WhatsApp</TableHead><TableHead>Alamat</TableHead><TableHead className="text-right">Transaksi</TableHead><TableHead className="text-right">Poin</TableHead><TableHead className="text-right">Sisa hutang</TableHead><TableHead /></TableRow></TableHeader>
               <TableBody>
                 {customers.map((c) => (
                   <TableRow key={c.id} data-testid={`customer-row-${c.name}`}>
-                    <TableCell className="font-semibold">{c.name}{c.note && <div className="text-xs font-normal text-muted-foreground">{c.note}</div>}</TableCell>
+                    <TableCell className="font-semibold">{c.name}{c.birthday && <span className="ml-1.5 inline-flex items-center gap-0.5 text-xs font-normal text-pink-700" data-testid={`customer-birthday-${c.name}`}><Cake className="size-3" />{fmtBirthday(c.birthday)}</span>}{c.note && <div className="text-xs font-normal text-muted-foreground">{c.note}</div>}</TableCell>
                     <TableCell className="font-mono text-xs" data-testid={`customer-code-${c.name}`}>{c.member_code}</TableCell>
                     <TableCell className="font-mono text-sm">{c.whatsapp || "-"}</TableCell>
                     <TableCell className="max-w-48 truncate">{c.address || "-"}</TableCell>
@@ -109,7 +148,7 @@ export default function Customers() {
                       <div className="flex justify-end gap-1">
                         <Button size="icon-sm" variant="ghost" title="Cetak kartu member" onClick={() => settings && printMemberCards([c], settings)} data-testid={`customer-card-${c.name}`}><IdCard /></Button>
                         <Button size="icon-sm" variant="ghost" onClick={() => setHistory(c)} data-testid={`customer-history-${c.name}`}><History /></Button>
-                        {me.role === "admin" && <><Button size="icon-sm" variant="ghost" onClick={() => { setEditing(c); setForm({ name: c.name, whatsapp: c.whatsapp, address: c.address, note: c.note }); }} data-testid={`customer-edit-${c.name}`}><Pencil /></Button>
+                        {me.role === "admin" && <><Button size="icon-sm" variant="ghost" onClick={() => { setEditing(c); setForm({ name: c.name, whatsapp: c.whatsapp, address: c.address, note: c.note, birthday: c.birthday ?? "" }); }} data-testid={`customer-edit-${c.name}`}><Pencil /></Button>
                         <Button size="icon-sm" variant="ghost" onClick={() => confirm(`Hapus ${c.name}?`) && del.mutate(c.id)} data-testid={`customer-delete-${c.name}`}><Trash2 className="text-rose-600" /></Button></>}
                       </div>
                     </TableCell>
@@ -192,6 +231,19 @@ export default function Customers() {
               <div className="space-y-1"><Label>Nomor WhatsApp</Label><Input value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} data-testid="customer-wa-input" /></div>
               <div className="space-y-1"><Label>Alamat</Label><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} data-testid="customer-address-input" /></div>
               <div className="space-y-1"><Label>Catatan</Label><Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} data-testid="customer-note-input" /></div>
+              <div className="space-y-1">
+                <Label>Tanggal lahir (opsional)</Label>
+                <div className="flex gap-2">
+                  <select value={form.birthday.slice(3)} onChange={(e) => { const d = e.target.value; const m = form.birthday.slice(0, 2) || "01"; setForm({ ...form, birthday: d ? `${m}-${d}` : "" }); }} className="h-9 w-24 rounded-md border bg-white px-2 text-sm" data-testid="customer-birthday-day-select">
+                    <option value="">Tgl</option>
+                    {Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0")).map((d) => <option key={d} value={d}>{Number(d)}</option>)}
+                  </select>
+                  <select value={form.birthday.slice(0, 2)} onChange={(e) => { const m = e.target.value; const d = form.birthday.slice(3) || "01"; setForm({ ...form, birthday: m ? `${m}-${d}` : "" }); }} className="h-9 flex-1 rounded-md border bg-white px-2 text-sm" data-testid="customer-birthday-month-select">
+                    <option value="">Bulan</option>
+                    {MONTHS.map((n, i) => <option key={n} value={String(i + 1).padStart(2, "0")}>{n}</option>)}
+                  </select>
+                </div>
+              </div>
               <DialogFooter><Button type="submit" disabled={save.isPending} data-testid="customer-save-button">Simpan</Button></DialogFooter>
             </form>
           )}

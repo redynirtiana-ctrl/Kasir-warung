@@ -223,6 +223,7 @@ class Settings(BaseModel):
     max_cashier_discount_percent: float = Field(default=10, ge=0, le=100)  # above this a kasir needs an admin PIN
     expiry_warning_days: int = Field(default=30, ge=1, le=365)
     morning_summary_enabled: bool = True  # auto-send at 07:00 WIB via Fonnte (needs token)
+    birthday_greeting_enabled: bool = True  # auto-send birthday wishes to members at 07:00 WIB (Fonnte)
     auto_wa_receipt: bool = False  # send receipt to member's WhatsApp after each sale (Fonnte)
 
 
@@ -434,12 +435,14 @@ class CustomerIn(BaseModel):
     whatsapp: str = ""
     address: str = ""
     note: str = ""
+    birthday: str = Field(default="", pattern=r"^((0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01]))?$")  # "MM-DD" (tanpa tahun) or ""
 
 
 class Customer(CustomerIn):
     id: str = Field(default_factory=_id)
     member_code: str = ""
     points: int = 0
+    birthday_greeted_year: int = 0  # last year a birthday greeting was sent (dedupe manual + cron)
     debt_remaining: float = 0
     transaction_count: int = 0
 
