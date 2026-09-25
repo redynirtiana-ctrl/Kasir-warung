@@ -4,9 +4,9 @@ import { can } from "@/lib/types";
 import type { User } from "@/lib/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, History, HandCoins, MessageCircle, IdCard } from "lucide-react";
+import { Plus, Pencil, Trash2, History, HandCoins, MessageCircle, IdCard, BellRing, Send } from "lucide-react";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
-import type { Customer, CustomerIn, Debt, Sale, Settings } from "@/lib/types";
+import type { Customer, CustomerIn, Debt, DueDebtGroup, Sale, Settings, WaReceiptResult } from "@/lib/types";
 import { errMsg, fmtDateTime, PAYMENT_LABELS, rupiah, todayLocal, waLink } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +53,18 @@ export default function Customers() {
   const pay = useMutation({
     mutationFn: () => apiPost<Debt>(`/v1/debts/${paying!.id}/payments`, { amount: Number(payAmount), note: payNote }),
     onSuccess: (d) => { toast.success(d.status === "paid" ? `Hutang ${d.invoice_no} LUNAS` : `Cicilan diterima, sisa ${rupiah(d.remaining)}`); setPaying(null); refresh(); },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const { data: dueToday = [] } = useQuery({ queryKey: ["debts", "due-today"], queryFn: () => apiGet<DueDebtGroup[]>("/v1/debts/due-today"), enabled: can(me, "receive_debt_payment") });
+  const [sentIds, setSentIds] = useState<string[]>([]);
+  const reminder = useMutation({
+    mutationFn: (g: DueDebtGroup) => apiPost<WaReceiptResult>(`/v1/customers/${g.customer_id}/debt-reminder`, { phone: g.whatsapp }),
+    onSuccess: (r, g) => {
+      setSentIds((s) => [...s, g.customer_id]);
+      if (r.sent) toast.success(`Pengingat terkirim ke ${g.customer_name}`);
+      else { toast.warning(`${r.reason}. Membuka WhatsApp…`); window.open(r.wa_link, "_blank", "noopener"); }
+    },
     onError: (e) => toast.error(errMsg(e)),
   });
 
@@ -109,6 +121,30 @@ export default function Customers() {
           </div>
         </TabsContent>
         <TabsContent value="debts" className="mt-4 space-y-3">
+          {dueToday.length > 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm" data-testid="due-today-panel">
+              <div className="mb-3 flex items-center gap-2">
+                <BellRing className="size-5 text-amber-700" />
+                <h3 className="font-semibold text-amber-900">Jatuh tempo hari ini ({dueToday.length} pelanggan)</h3>
+                <span className="ml-auto text-sm font-semibold text-amber-900" data-testid="due-today-total">{rupiah(dueToday.reduce((a, g) => a + g.total_remaining, 0))}</span>
+              </div>
+              <div className="divide-y divide-amber-200/70">
+                {dueToday.map((g) => (
+                  <div key={g.customer_id} className="flex flex-wrap items-center gap-3 py-2" data-testid={`due-today-row-${g.customer_name}`}>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium">{g.customer_name} {g.overdue && <Badge className="ml-1 bg-rose-100 text-rose-800">LEWAT TEMPO</Badge>}</div>
+                      <div className="text-xs text-muted-foreground">{g.invoices.join(", ")} · {g.whatsapp || "tanpa nomor WA"}</div>
+                    </div>
+                    <div className="font-semibold text-amber-900" data-testid={`due-today-amount-${g.customer_name}`}>{rupiah(g.total_remaining)}</div>
+                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={!g.whatsapp || (reminder.isPending && reminder.variables?.customer_id === g.customer_id)}
+                      onClick={() => reminder.mutate(g)} data-testid={`due-today-remind-${g.customer_name}`}>
+                      <Send /> {sentIds.includes(g.customer_id) ? "Kirim Ulang" : "Kirim Pengingat"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-9 rounded-md border bg-white px-2 text-sm" data-testid="debt-status-filter">
               <option value="open">Belum lunas</option><option value="paid">Lunas</option><option value="">Semua</option>

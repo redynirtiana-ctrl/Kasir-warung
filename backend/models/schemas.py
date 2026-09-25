@@ -105,6 +105,7 @@ ProductIn.model_rebuild()
 class Product(ProductIn):
     id: str = Field(default_factory=_id)
     category_name: str | None = None
+    store_id: str = "main"
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 
@@ -150,6 +151,7 @@ class SaleIn(BaseModel):
     due_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     redeem_points: int = Field(default=0, ge=0)
     approval_pin: str | None = Field(default=None, max_length=12)
+    send_wa_receipt: bool | None = None  # None = follow Settings.auto_wa_receipt
 
 
 class SaleItem(BaseModel):
@@ -187,6 +189,8 @@ class Sale(BaseModel):
     points_discount: float = 0
     date: str
     created_at: datetime
+    store_id: str = "main"
+    wa_receipt_queued: bool = False
 
 
 class VoidIn(BaseModel):
@@ -219,6 +223,7 @@ class Settings(BaseModel):
     max_cashier_discount_percent: float = Field(default=10, ge=0, le=100)  # above this a kasir needs an admin PIN
     expiry_warning_days: int = Field(default=30, ge=1, le=365)
     morning_summary_enabled: bool = True  # auto-send at 07:00 WIB via Fonnte (needs token)
+    auto_wa_receipt: bool = False  # send receipt to member's WhatsApp after each sale (Fonnte)
 
 
 # ---------- dashboard ----------
@@ -642,3 +647,32 @@ class WaReceiptResult(BaseModel):
     target: str
     reason: str = ""
     wa_link: str
+
+
+# ---------- pengingat hutang ----------
+class DueDebtGroup(BaseModel):
+    customer_id: str
+    customer_name: str
+    whatsapp: str
+    total_remaining: float
+    invoices: list[str]
+    earliest_due: str
+    overdue: bool  # True if any debt is past due (not just today)
+
+
+# ---------- toko / cabang (fondasi multi-cabang) ----------
+class StoreIn(BaseModel):
+    code: str = Field(min_length=2, max_length=10, pattern=r"^[A-Za-z0-9_-]+$")
+    name: str = Field(min_length=1, max_length=100)
+    address: str = ""
+    phone: str = ""
+    active: bool = True
+
+
+class Store(StoreIn):
+    id: str = Field(default_factory=_id)
+    is_main: bool = False
+    product_count: int = 0
+    sales_count: int = 0
+    sales_total: float = 0
+    created_at: datetime = Field(default_factory=_now)

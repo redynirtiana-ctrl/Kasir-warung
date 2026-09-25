@@ -72,6 +72,7 @@ export default function Pos() {
   const [customerId, setCustomerId] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [redeemPts, setRedeemPts] = useState(0);
+  const [waAuto, setWaAuto] = useState(false);
   const [pinReason, setPinReason] = useState<string | null>(null);
   const lastPayload = useRef<SaleIn | null>(null);
   const [lastSale, setLastSale] = useState<Sale | null>(null);
@@ -207,6 +208,7 @@ export default function Pos() {
     setCustomerId(cart.customerId ?? "");
     setDueDate("");
     setRedeemPts(0);
+    setWaAuto(settings?.auto_wa_receipt ?? false);
     setPayOpen(true);
   };
 
@@ -219,6 +221,7 @@ export default function Pos() {
       setReceiptOpen(true);
       removeCart(cart.id);
       toast.success(`Transaksi berhasil · ${sale.invoice_no}`);
+      if (lastPayload.current?.send_wa_receipt && !sale.wa_receipt_queued) toast.info("Struk belum terkirim otomatis (token Fonnte belum diatur) — pakai tombol Kirim WA");
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["sales"] });
@@ -237,6 +240,7 @@ export default function Pos() {
     if (redeemPts && redeemPts < (settings?.min_redeem_points ?? 0)) return toast.error(`Minimal tukar ${settings?.min_redeem_points} poin`);
     pay.mutate({
       redeem_points: redeemPts,
+      send_wa_receipt: customerId ? waAuto : null,
       customer_id: customerId || null,
       due_date: method === "hutang" && dueDate ? dueDate : null,
       items: cart.items.map((i) => ({ product_id: i.product.id, qty: i.qty, discount: i.discount, unit: i.unit ?? null })),
@@ -457,6 +461,13 @@ export default function Pos() {
               {customers.map((c) => <option key={c.id} value={c.id}>{c.debt_remaining > 0 ? `${c.name} (hutang ${rupiah(c.debt_remaining)})` : c.name}</option>)}
             </select>
           </div>
+          {selCustomer && (
+            <label className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900" data-testid="pay-wa-receipt-row">
+              <input type="checkbox" className="size-4 accent-emerald-600" checked={waAuto} disabled={!selCustomer.whatsapp} onChange={(e) => setWaAuto(e.target.checked)} data-testid="pay-wa-receipt-checkbox" />
+              <MessageCircle className="size-4" />
+              {selCustomer.whatsapp ? <span>Kirim struk ke WA {selCustomer.whatsapp}</span> : <span className="text-muted-foreground">Member belum punya nomor WA</span>}
+            </label>
+          )}
           {loyalty && (
             <div className="rounded-lg bg-violet-50 p-3 text-sm" data-testid="pay-points-box">
               <div className="flex justify-between"><span>Poin {selCustomer!.name}</span><b data-testid="pay-customer-points">{num(selCustomer!.points)} poin</b></div>
@@ -505,6 +516,7 @@ export default function Pos() {
         {lastSale && settings && (
           <DialogContent className="sm:max-w-sm" data-testid="receipt-dialog">
             <DialogHeader><DialogTitle>Transaksi Berhasil</DialogTitle></DialogHeader>
+            {lastSale.wa_receipt_queued && <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800" data-testid="receipt-wa-auto-sent"><MessageCircle className="size-4" /> Struk sedang dikirim otomatis ke WhatsApp member</div>}
             <div className="max-h-96 overflow-y-auto rounded-lg border border-dashed bg-amber-50 p-3 font-mono text-xs [&_.b]:font-bold [&_.big]:text-sm [&_.c]:text-center [&_.hr]:my-1 [&_.hr]:border-t [&_.hr]:border-dashed [&_.hr]:border-stone-400 [&_.r]:flex [&_.r]:justify-between"
               data-testid="receipt-preview" dangerouslySetInnerHTML={{ __html: receiptHtml(lastSale, settings) }} />
             <DialogFooter className="gap-2">

@@ -74,3 +74,17 @@ Customers & debt, expenses module (separate from shift drawer expenses), nightly
 - Tombol "Kirim WA" ada di dialog struk kasir (setelah transaksi), di tiap baris Penjualan, dan di dialog detail penjualan. Semuanya membuka `WaReceiptDialog`.
 - `GET /api/v1/sales/{id}/whatsapp` → WaReceiptPreview {phone (WA member, bisa diedit), customer_name, text (struk teks), fonnte_configured}
 - `POST /api/v1/sales/{id}/whatsapp` {phone} → WaReceiptResult {sent, via: fonnte|link, target, reason, wa_link}. Kalau Fonnte tidak diatur atau gagal: sent=false, lalu frontend membuka wa_link. Dicatat di notification_logs (kind=receipt) dan di audit log.
+
+## Kirim struk otomatis ke member
+- Settings.auto_wa_receipt (bool, bawaan false). SaleIn.send_wa_receipt (bool|null; kalau null ikut pengaturan) diatur lewat kotak centang di dialog bayar (muncul kalau ada member yang dipilih).
+- Setelah penjualan tersimpan, kalau member punya nomor WA dan token Fonnte ada, struk dikirim di latar belakang (asyncio task). Sale.wa_receipt_queued = true. Hasilnya dicatat di notification_logs (kind=receipt_auto).
+
+## Pengingat hutang WA (manual)
+- `GET /api/v1/debts/due-today` → DueDebtGroup[] (hutang belum lunas yang due_date <= hari ini, dikelompokkan per pelanggan)
+- `POST /api/v1/customers/{id}/debt-reminder` {phone} → WaReceiptResult (pesan sopan; Fonnte, cadangan wa.me). Tab Piutang menampilkan panel "Jatuh tempo hari ini" dengan tombol Kirim Pengingat per pelanggan.
+
+## Fondasi multi-cabang
+- Collection `stores` {id, code (unik, huruf besar), name, address, phone, active, is_main, created_at}. Cabang Utama id="main".
+- Migrasi 007_add_store_id (lib/stores.py, jalan saat startup, idempotent, dicatat di collection `migrations`): menandai products/sales/purchases/stock_movements lama dengan store_id="main".
+- Data baru diberi store_id = current_store_id(user) (user.store_id kalau ada, kalau tidak "main").
+- `/api/v1/stores` untuk GET, POST, PUT, DELETE (cabang utama tidak bisa dihapus atau dinonaktifkan; cabang yang sudah punya data tidak bisa dihapus). Halaman /stores menu "Cabang" (khusus admin).

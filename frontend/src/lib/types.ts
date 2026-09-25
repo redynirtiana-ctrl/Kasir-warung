@@ -82,6 +82,7 @@ export interface WholesaleTier {
 export interface Product extends ProductIn {
   id: string;
   category_name: string | null;
+  store_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -112,6 +113,7 @@ export interface SaleIn {
   due_date: string | null;
   redeem_points: number;
   approval_pin?: string | null;
+  send_wa_receipt?: boolean | null;
 }
 
 export interface SaleItem {
@@ -149,6 +151,8 @@ export interface Sale {
   points_discount: number;
   date: string;
   created_at: string;
+  store_id: string;
+  wa_receipt_queued: boolean;
 }
 
 export interface Settings {
@@ -170,6 +174,7 @@ export interface Settings {
   max_cashier_discount_percent: number;
   expiry_warning_days: number;
   morning_summary_enabled: boolean;
+  auto_wa_receipt: boolean;
 }
 
 export interface ChartPoint {
@@ -607,4 +612,33 @@ export interface WaReceiptResult {
   target: string;
   reason: string;
   wa_link: string;
+}
+
+// ---------- pengingat hutang ----------
+export interface DueDebtGroup {
+  customer_id: string;
+  customer_name: string;
+  whatsapp: string;
+  total_remaining: number;
+  invoices: string[];
+  earliest_due: string;
+  overdue: boolean;
+}
+
+// ---------- toko / cabang ----------
+export interface StoreIn {
+  code: string;
+  name: string;
+  address: string;
+  phone: string;
+  active: boolean;
+}
+
+export interface Store extends StoreIn {
+  id: string;
+  is_main: boolean;
+  product_count: number;
+  sales_count: number;
+  sales_total: number;
+  created_at: string;
 }

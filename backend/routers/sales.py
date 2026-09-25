@@ -9,6 +9,7 @@ from pymongo import ReturnDocument
 from fastapi import Request
 from lib.auth import audit, get_current_user, has_perm, require_admin, verify_admin_pin
 from lib.db import db
+from lib.stores import current_store_id
 from lib.pricing import effective_price
 from models.schemas import Sale, SaleIn, Settings, VoidIn
 from routers.products import record_movement
@@ -154,7 +155,11 @@ async def create_sale(body: SaleIn, request: Request, user: dict = Depends(get_c
                 change=max(paid - total, 0), cashier_name=user["full_name"], status="completed",
                 customer_id=customer["id"] if customer else None, customer_name=customer["name"] if customer else None,
                 points_earned=earned, points_redeemed=redeem, points_discount=points_discount,
-                date=date_str, created_at=now)
+                date=date_str, created_at=now, store_id=current_store_id(user))
+    send_wa = settings.auto_wa_receipt if body.send_wa_receipt is None else body.send_wa_receipt
+    if send_wa and customer and customer.get("whatsapp"):
+        from routers.notifications import queue_receipt  # local import: notifications imports this module
+        sale.wa_receipt_queued = await queue_receipt(sale.model_dump(), customer["whatsapp"], user)
     await db.sales.insert_one({**sale.model_dump(), "cashier_id": user["id"]})
     if body.payment_method == "hutang":
         from routers.customers import create_debt

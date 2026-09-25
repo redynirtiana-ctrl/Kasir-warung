@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from lib.auth import audit, get_current_user, require_admin
 from lib.db import db
+from lib.stores import current_store_id
 from models.schemas import Product, ProductIn, StockAdjustIn, StockMovement
 
 router = APIRouter(tags=["products"])
@@ -43,6 +44,7 @@ async def record_movement(product: dict, type_: str, qty: float, before: float, 
         "id": str(uuid.uuid4()), "product_id": product["id"], "product_name": product["name"],
         "type": type_, "qty": qty, "stock_before": before, "stock_after": after,
         "user_id": user["id"], "username": user["username"], "note": note,
+        "store_id": product.get("store_id") or current_store_id(user),
         "created_at": datetime.now(timezone.utc),
     })
 
@@ -80,7 +82,8 @@ async def create_product(body: ProductIn, admin: dict = Depends(require_admin)):
     if not body.barcode:
         body.barcode = await generate_unique_barcode()
     await _check_unique(body)
-    product = Product(**body.model_dump(), category_name=await _category_name(body.category_id))
+    product = Product(**body.model_dump(), category_name=await _category_name(body.category_id),
+                      store_id=current_store_id(admin))
     await db.products.insert_one(product.model_dump())
     if product.stock:
         await record_movement(product.model_dump(), "stock_in", product.stock, 0, product.stock, admin, "Stok awal")

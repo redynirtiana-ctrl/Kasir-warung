@@ -16,7 +16,7 @@ function testSale(): Sale {
   return {
     id: "test", invoice_no: "TEST-PRINT", subtotal: 111000, discount: 0, tax: 0, total: 111000, payment_method: "cash",
     amount_paid: 120000, change: 9000, cashier_name: "Test", status: "completed", void_reason: null, customer_id: null, customer_name: null, points_earned: 0, points_redeemed: 0, points_discount: 0,
-    date: "", created_at: new Date().toISOString(),
+    date: "", created_at: new Date().toISOString(), store_id: "main", wa_receipt_queued: false,
     items: [
       { product_id: "1", name: "Beras", unit: "karung", qty: 1, price: 75000, buy_price: 0, discount: 0, subtotal: 75000, normal_price: 0, price_type: "normal", factor: 1 },
       { product_id: "2", name: "Minyak", unit: "pcs", qty: 2, price: 18000, buy_price: 0, discount: 0, subtotal: 36000, normal_price: 0, price_type: "normal", factor: 1 },
@@ -49,6 +49,7 @@ function SettingsForm({ initial }: { initial: SettingsData }) {
       <div className="space-y-1"><Label>WhatsApp pemilik (tujuan laporan)</Label><Input value={f.owner_whatsapp} onChange={(e) => setF({ ...f, owner_whatsapp: e.target.value })} placeholder="08xxxxxxxxxx" data-testid="settings-owner-wa-input" /></div>
       <div className="space-y-1"><Label>Kategori pengeluaran (pisahkan koma)</Label><Input value={f.expense_categories.join(", ")} onChange={(e) => setF({ ...f, expense_categories: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })} data-testid="settings-expense-categories-input" /></div>
       <label className="flex items-center gap-2 text-sm md:col-span-2"><Checkbox checked={f.morning_summary_enabled} onCheckedChange={(v) => setF({ ...f, morning_summary_enabled: Boolean(v) })} data-testid="settings-morning-summary-checkbox" /> Kirim ringkasan pagi otomatis ke WhatsApp pemilik (07:00 WIB, via Fonnte)</label>
+      <label className="flex items-center gap-2 text-sm md:col-span-2"><Checkbox checked={f.auto_wa_receipt} onCheckedChange={(v) => setF({ ...f, auto_wa_receipt: Boolean(v) })} data-testid="settings-auto-wa-receipt-checkbox" /> Kirim struk otomatis ke WhatsApp member setiap transaksi selesai (via Fonnte, kasir bisa matikan per transaksi)</label>
       <div className="space-y-1"><Label>Batas diskon kasir tanpa PIN admin (%)</Label><Input type="number" min={0} max={100} value={f.max_cashier_discount_percent} onChange={(e) => setF({ ...f, max_cashier_discount_percent: Number(e.target.value) })} data-testid="settings-max-discount-input" /></div>
       <div className="space-y-1"><Label>Peringatan kedaluwarsa (hari sebelumnya)</Label><Input type="number" min={1} max={365} value={f.expiry_warning_days} onChange={(e) => setF({ ...f, expiry_warning_days: Number(e.target.value) })} data-testid="settings-expiry-days-input" /></div>
       <div className="space-y-1"><Label>Pajak (%)</Label><Input type="number" min={0} max={100} value={f.tax_percent} onChange={(e) => setF({ ...f, tax_percent: Number(e.target.value) })} data-testid="settings-tax-input" /></div>

@@ -7,6 +7,7 @@ from pymongo import ReturnDocument
 
 from lib.auth import audit, require_admin
 from lib.db import db
+from lib.stores import current_store_id
 from models.schemas import Purchase, PurchaseIn, Supplier, SupplierIn
 from routers.products import record_movement
 
@@ -86,7 +87,7 @@ async def create_purchase(body: PurchaseIn, admin: dict = Depends(require_admin)
                         invoice_no=body.invoice_no, date=body.date, items=items,
                         total=sum(i["subtotal"] for i in items), note=body.note,
                         username=admin["username"], created_at=now)
-    await db.purchases.insert_one(purchase.model_dump())
+    await db.purchases.insert_one({**purchase.model_dump(), "store_id": current_store_id(admin)})
     batches = [{"id": str(uuid.uuid4()), "product_id": i.product_id, "product_name": products[i.product_id]["name"],
                 "purchase_id": purchase.id, "invoice_no": body.invoice_no, "supplier_name": sup["name"],
                 "expiry_date": i.expiry_date, "qty": i.qty, "dismissed": False, "created_at": now}

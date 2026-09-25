@@ -52,6 +52,8 @@ INDEXES: dict[str, list[IndexModel]] = {
               IndexModel([("status", ASCENDING), ("due_date", ASCENDING)], name="status_due")],
     "expenses": [IndexModel([("id", ASCENDING)], name="id", unique=True), IndexModel([("date", DESCENDING)], name="date_desc")],
     "daily_reports": [IndexModel([("date", ASCENDING)], name="date", unique=True)],
+    "stores": [IndexModel([("id", ASCENDING)], name="id", unique=True), IndexModel([("code", ASCENDING)], name="code", unique=True)],
+    "migrations": [IndexModel([("name", ASCENDING)], name="name", unique=True)],
     "cron_runs": [IndexModel([("run_id", ASCENDING)], name="run_id", unique=True)],
     "backups": [IndexModel([("id", ASCENDING)], name="id", unique=True), IndexModel([("created_at", DESCENDING)], name="created_desc")],
     "stock_opnames": [IndexModel([("id", ASCENDING)], name="id", unique=True), IndexModel([("created_at", DESCENDING)], name="created_desc")],

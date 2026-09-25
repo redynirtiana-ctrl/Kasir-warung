@@ -15,7 +15,8 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 from lib.db import client, ensure_indexes  # noqa: E402
-from routers import auth, users, categories, products, sales, dashboard, purchases, returns, shifts, reports, customers, expenses, backup, product_import, opname, export, notifications  # noqa: E402
+from lib.stores import migrate_stores  # noqa: E402
+from routers import auth, users, categories, products, sales, dashboard, purchases, returns, shifts, reports, customers, expenses, backup, product_import, opname, export, notifications, stores  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("wbc")
@@ -24,6 +25,7 @@ logger = logging.getLogger("wbc")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.index_task = asyncio.create_task(ensure_indexes())
+    app.state.migrate_task = asyncio.create_task(migrate_stores())
     yield
     client.close()
 
@@ -40,7 +42,7 @@ async def root():
 
 # Versioned API: /api/v1/... — add /api/v2 later without breaking v1 clients.
 v1 = APIRouter(prefix="/v1")
-for module in (auth, users, categories, product_import, products, sales, dashboard, purchases, returns, shifts, reports, customers, expenses, backup, opname, export, notifications):
+for module in (auth, users, categories, product_import, products, sales, dashboard, purchases, returns, shifts, reports, customers, expenses, backup, opname, export, notifications, stores):
     v1.include_router(module.router)
 v1.include_router(reports.cron_router)
 v1.include_router(backup.cron_router)

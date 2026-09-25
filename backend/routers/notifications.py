@@ -12,9 +12,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from urllib.parse import quote
 
 from integrations.fonnte import FonnteError, get_token, normalize, send_whatsapp
-from lib.auth import audit, get_current_user, require_admin
+from lib.auth import audit, get_current_user, require_admin, require_perm
 from lib.db import db
-from models.schemas import (FonnteStatus, FonnteTokenIn, MorningSummary, NotificationLog, WaReceiptIn,
+from models.schemas import (DueDebtGroup, FonnteStatus, FonnteTokenIn, MorningSummary, NotificationLog, WaReceiptIn,
                             WaReceiptPreview, WaReceiptResult)
 from routers.dashboard import expiring_list
 from routers.sales import get_settings, store_tz
@@ -195,6 +195,94 @@ async def wa_receipt_send(id: str, body: WaReceiptIn, user: dict = Depends(get_c
             ok, reason, via = False, str(e), "link"
     await _log("receipt", "fonnte" if token else "link", target, ok, reason)
     await audit(user, "whatsapp_receipt", f"{sale['invoice_no']} -> {target} ok={ok}")
+    return WaReceiptResult(sent=ok, via=via, target=target, reason=reason, wa_link=link)
+
+
+async def _send_receipt_bg(sale: dict, target: str) -> None:
+    try:
+        text = await receipt_text(sale)
+        try:
+            await send_whatsapp(target, text)
+            ok, reason = True, ""
+        except FonnteError as e:
+            ok, reason = False, str(e)
+        logger.info("auto receipt %s -> %s ok=%s %s", sale["invoice_no"], target, ok, reason)
+        await _log("receipt_auto", "fonnte", target, ok, reason)
+    except Exception:
+        logger.exception("auto receipt failed for %s", sale.get("invoice_no"))
+
+
+async def queue_receipt(sale: dict, phone: str, user: dict) -> bool:
+    """Fire-and-forget receipt to the member's WhatsApp via Fonnte. Returns False if Fonnte is not configured."""
+    token, _src = await get_token()
+    if not token:
+        await _log("receipt_auto", "fonnte", normalize(phone), False, "Token Fonnte belum diatur")
+        return False
+    asyncio.create_task(_send_receipt_bg(sale, normalize(phone)))
+    return True
+
+
+# ---------- pengingat hutang jatuh tempo ----------
+async def _due_debts(customer_id: str | None = None) -> list[dict]:
+    today = datetime.now(store_tz()).date().isoformat()
+    q: dict = {"status": "open", "due_date": {"$ne": None, "$lte": today}}
+    if customer_id:
+        q["customer_id"] = customer_id
+    return await db.debts.find(q, {"_id": 0}).sort("due_date", 1).to_list(1000)
+
+
+@router.get("/debts/due-today", response_model=list[DueDebtGroup])
+async def debts_due_today(_: dict = Depends(require_perm("receive_debt_payment"))):
+    today = datetime.now(store_tz()).date().isoformat()
+    groups: dict[str, dict] = {}
+    for d in await _due_debts():
+        g = groups.setdefault(d["customer_id"], {"customer_id": d["customer_id"], "customer_name": d["customer_name"],
+                                                 "total_remaining": 0.0, "invoices": [], "earliest_due": d["due_date"]})
+        g["total_remaining"] += d["remaining"]
+        g["invoices"].append(d["invoice_no"])
+    phones = {c["id"]: c.get("whatsapp", "") async for c in db.customers.find({"id": {"$in": list(groups)}}, {"_id": 0, "id": 1, "whatsapp": 1})}
+    return [DueDebtGroup(**g, whatsapp=phones.get(cid, ""), overdue=g["earliest_due"] < today) for cid, g in groups.items()]
+
+
+async def reminder_text(customer: dict, debts: list[dict]) -> str:
+    s = await get_settings()
+    today = datetime.now(store_tz()).date().isoformat()
+    lines = [f"Assalamu'alaikum / Selamat pagi, Bapak/Ibu {customer['name']} 🙏", "",
+             f"Kami dari *{s.store_name}* ingin mengingatkan dengan hormat bahwa ada catatan belanja yang sudah jatuh tempo:", ""]
+    for d in debts:
+        when = "hari ini" if d["due_date"] == today else f"sejak {datetime.fromisoformat(d['due_date']).strftime('%d-%m-%Y')}"
+        lines.append(f"• {d['invoice_no']} — sisa Rp {_n(d['remaining'])} (jatuh tempo {when})")
+    lines += ["", f"*Total: Rp {_n(sum(d['remaining'] for d in debts))}*", "",
+              "Pembayaran bisa dilakukan langsung di warung atau dicicil sesuai kemampuan.",
+              "Mohon abaikan pesan ini jika sudah melakukan pembayaran.", "",
+              "Terima kasih atas kepercayaan dan langganannya 🙏", f"Salam hangat,\n{s.store_name}"]
+    if s.whatsapp:
+        lines.append(f"WA: {s.whatsapp}")
+    return "\n".join(lines)
+
+
+@router.post("/customers/{id}/debt-reminder", response_model=WaReceiptResult)
+async def send_debt_reminder(id: str, body: WaReceiptIn, user: dict = Depends(require_perm("receive_debt_payment"))):
+    customer = await db.customers.find_one({"id": id}, {"_id": 0})
+    if not customer:
+        raise HTTPException(404, "Pelanggan tidak ditemukan")
+    debts = await _due_debts(id)
+    if not debts:
+        raise HTTPException(400, "Pelanggan ini tidak punya hutang jatuh tempo")
+    text = await reminder_text(customer, debts)
+    target = normalize(body.phone)
+    link = f"https://wa.me/{target}?text={quote(text)}"
+    token, _src = await get_token()
+    if not token:
+        ok, reason, via = False, "Token Fonnte belum diatur — gunakan tautan WhatsApp", "link"
+    else:
+        try:
+            await send_whatsapp(target, text)
+            ok, reason, via = True, "", "fonnte"
+        except FonnteError as e:
+            ok, reason, via = False, str(e), "link"
+    await _log("debt_reminder", "fonnte" if token else "link", target, ok, reason)
+    await audit(user, "whatsapp_debt_reminder", f"{customer['name']} -> {target} ok={ok}")
     return WaReceiptResult(sent=ok, via=via, target=target, reason=reason, wa_link=link)
 
 

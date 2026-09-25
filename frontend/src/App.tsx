@@ -18,6 +18,7 @@ import Expenses from "@/pages/Expenses";
 import Backup from "@/pages/Backup";
 import Opname from "@/pages/Opname";
 import CustomerDisplay from "@/pages/CustomerDisplay";
+import Stores from "@/pages/Stores";
 
 export default function App() {
   return (
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/sales" element={<Sales />} />
         <Route path="/users" element={<Users />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/stores" element={<Stores />} />
       </Route>
       <Route path="/display" element={<CustomerDisplay />} />
       <Route path="*" element={<Navigate to="/" replace />} />
