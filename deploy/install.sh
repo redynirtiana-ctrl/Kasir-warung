@@ -104,6 +104,11 @@ d="$APP_DIR/frontend/dist"; while [ "$d" != "/" ]; do chmod o+x "$d"; d="$(dirna
 chmod -R o+r "$APP_DIR/frontend/dist"
 nginx -t && systemctl reload nginx
 
+if ! command -v rclone >/dev/null; then
+  say "Memasang rclone (untuk Backup ke Google Drive)"
+  curl -fsSL https://rclone.org/install.sh | bash || echo "PERINGATAN: rclone gagal dipasang — Backup ke Google Drive tidak tersedia"
+fi
+
 say "Mount flashdisk otomatis (untuk Backup ke Flashdisk)"
 RUID="$(id -u "$RUN_USER")"; RGID="$(id -g "$RUN_USER")"
 cat > /etc/udev/rules.d/99-warung-usb.rules <<RULES

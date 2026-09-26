@@ -228,7 +228,8 @@ class Settings(BaseModel):
     morning_summary_enabled: bool = True  # auto-send at 07:00 WIB via Fonnte (needs token)
     birthday_greeting_enabled: bool = True  # auto-send birthday wishes to members at 07:00 WIB (Fonnte)
     auto_wa_receipt: bool = False
-    usb_backup_auto: bool = False  # copy nightly backup to plugged-in flashdisk  # send receipt to member's WhatsApp after each sale (Fonnte)
+    usb_backup_auto: bool = False  # copy nightly backup to plugged-in flashdisk
+    gdrive_backup_auto: bool = False  # upload nightly backup to owner's Google Drive (rclone)  # send receipt to member's WhatsApp after each sale (Fonnte)
 
 
 # ---------- dashboard ----------
@@ -509,6 +510,7 @@ class BackupInfo(BaseModel):
     username: str
     created_at: datetime
     usb_copied_to: list[str] = []  # flashdisk labels this backup was copied to
+    gdrive_uploaded: bool = False
 
 
 class UsbDrive(BaseModel):
@@ -522,6 +524,26 @@ class UsbDrive(BaseModel):
 class UsbStatus(BaseModel):
     drives: list[UsbDrive]
     auto_copy: bool  # copy each nightly auto-backup to every detected flashdisk
+
+
+class GdriveStatus(BaseModel):
+    installed: bool
+    configured: bool
+    connected: bool
+    remote: str
+    folder: str
+    reason: str = ""
+    quota_total: int | None = None
+    quota_free: int | None = None
+    auto_copy: bool
+    last_upload_at: datetime | None = None
+    last_error: str = ""
+
+
+class GdriveUploadResult(BaseModel):
+    uploaded: str
+    deleted: list[str]
+    retained: int
 
 
 class UsbAutoIn(BaseModel):

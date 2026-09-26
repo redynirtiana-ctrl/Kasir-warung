@@ -203,6 +203,10 @@ Ubuntu Desktop memasang flashdisk otomatis. Ubuntu Server memakai aturan udev ya
 (`/etc/udev/rules.d/99-warung-usb.rules`, lokasi mount `/media/warung-usb/...`).
 Folder lain seperti NAS bisa ditambahkan lewat `.env`: `USB_BACKUP_EXTRA_DIRS=/mnt/nas-backup`.
 
+## 10c. Backup ke Google Drive
+
+Supaya ada cadangan kedua **di luar warung**, ikuti **[GOOGLE-DRIVE.md](GOOGLE-DRIVE.md)**. Setup-nya sekali saja di server, sekitar 5 menit.
+
 ## 11. HTTPS (kalau memakai domain / VPS)
 
 ```bash

@@ -16,15 +16,16 @@ from fastapi.responses import FileResponse
 from lib.auth import audit, require_admin
 from lib.db import db, ensure_indexes
 from routers.sales import get_settings
+from integrations import gdrive
 from lib.usb import copy_to_drive, detect_drives
-from models.schemas import BackupInfo, UsbAutoIn, UsbCopyIn, UsbCopyResult, UsbDrive, UsbStatus
+from models.schemas import BackupInfo, GdriveStatus, GdriveUploadResult, UsbAutoIn, UsbCopyIn, UsbCopyResult, UsbDrive, UsbStatus
 
 router = APIRouter(prefix="/backups", tags=["backup"])
 cron_router = APIRouter(prefix="/cron", tags=["cron"])
 logger = logging.getLogger("wbc.backup")
 
 BACKUP_DIR = Path(os.environ.get("BACKUP_DIR", Path(__file__).parent.parent / "backups"))
-SKIP = {"backups", "cron_runs"}
+SKIP = {"backups", "cron_runs", "meta"}
 KEEP_AUTO = 14
 
 
@@ -126,6 +127,49 @@ async def copy_backup_to_usb(id: str, body: UsbCopyIn, admin: dict = Depends(req
     return res
 
 
+# ---------- Google Drive (rclone) ----------
+async def _gdrive_state() -> dict:
+    return await db.meta.find_one({"key": "gdrive"}, {"_id": 0}) or {}
+
+
+@router.get("/gdrive", response_model=GdriveStatus)
+async def gdrive_status(_: dict = Depends(require_admin)):
+    st, state = await gdrive.status(), await _gdrive_state()
+    return GdriveStatus(**st, auto_copy=(await get_settings()).gdrive_backup_auto,
+                        last_upload_at=state.get("last_upload_at"), last_error=state.get("last_error", ""))
+
+
+@router.put("/gdrive/auto", response_model=GdriveStatus)
+async def gdrive_auto(body: UsbAutoIn, admin: dict = Depends(require_admin)):
+    await db.settings.update_one({"key": "store"}, {"$set": {"gdrive_backup_auto": body.auto_copy}}, upsert=True)
+    await audit(admin, "gdrive_backup_auto", str(body.auto_copy))
+    return await gdrive_status(admin)
+
+
+async def _gdrive_upload(b: dict, retry: bool = False) -> GdriveUploadResult:
+    src = BACKUP_DIR / b["filename"]
+    if not src.exists():
+        raise HTTPException(404, "File backup tidak ditemukan")
+    try:
+        res = await (gdrive.upload_with_retry(src) if retry else gdrive.upload(src))
+    except gdrive.RcloneError as e:
+        await db.meta.update_one({"key": "gdrive"}, {"$set": {"last_error": str(e), "last_error_at": datetime.now(timezone.utc)}}, upsert=True)
+        raise HTTPException(400, str(e))
+    await db.backups.update_one({"id": b["id"]}, {"$set": {"gdrive_uploaded": True}})
+    await db.meta.update_one({"key": "gdrive"}, {"$set": {"last_upload_at": datetime.now(timezone.utc), "last_error": ""}}, upsert=True)
+    return GdriveUploadResult(**res)
+
+
+@router.post("/{id}/copy-to-gdrive", response_model=GdriveUploadResult)
+async def copy_backup_to_gdrive(id: str, admin: dict = Depends(require_admin)):
+    b = await db.backups.find_one({"id": id}, {"_id": 0})
+    if not b:
+        raise HTTPException(404, "Backup tidak ditemukan")
+    res = await _gdrive_upload(b)
+    await audit(admin, "backup_copy_gdrive", b["filename"])
+    return res
+
+
 @router.get("/{id}/download")
 async def download(id: str, _: dict = Depends(require_admin)):
     b = await db.backups.find_one({"id": id})
@@ -168,7 +212,14 @@ async def _auto_job(run_id: str) -> None:
     except Exception:
         logger.exception("auto backup failed (run %s)", run_id)
         return
-    if not (await get_settings()).usb_backup_auto:
+    settings = await get_settings()
+    if settings.gdrive_backup_auto:
+        try:
+            await _gdrive_upload(info.model_dump(), retry=True)
+            logger.info("auto backup uploaded to Google Drive")
+        except Exception:
+            logger.exception("auto backup upload to Google Drive failed")
+    if not settings.usb_backup_auto:
         return
     drives = await asyncio.to_thread(detect_drives)
     if not drives:

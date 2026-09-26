@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { DatabaseBackup, Download, RotateCcw, Trash2, Upload, ShieldAlert, Moon, Usb, RefreshCw } from "lucide-react";
+import { DatabaseBackup, Download, RotateCcw, Trash2, Upload, ShieldAlert, Moon, Usb, RefreshCw, Cloud, CloudUpload } from "lucide-react";
 import { apiDelete, apiGet, apiPost, apiPut, apiUpload } from "@/lib/api";
-import type { BackupInfo, UsbCopyResult, UsbStatus } from "@/lib/types";
+import type { BackupInfo, GdriveStatus, GdriveUploadResult, UsbCopyResult, UsbStatus } from "@/lib/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { errMsg, fmtDateTime } from "@/lib/format";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -40,6 +40,24 @@ export default function Backup() {
   const autoUsb = useMutation({
     mutationFn: (v: boolean) => apiPut<UsbStatus>("/v1/backups/usb/auto", { auto_copy: v }),
     onSuccess: (s) => { toast.success(s.auto_copy ? "Backup malam akan otomatis disalin ke flashdisk" : "Salin otomatis ke flashdisk dimatikan"); qc.invalidateQueries({ queryKey: ["backups", "usb"] }); },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const gd = useQuery({ queryKey: ["backups", "gdrive"], queryFn: () => apiGet<GdriveStatus>("/v1/backups/gdrive"), staleTime: 60000 });
+  const gdOk = gd.data?.connected ?? false;
+  const toDrive = useMutation({
+    mutationFn: (b: BackupInfo) => apiPost<GdriveUploadResult>(`/v1/backups/${b.id}/copy-to-gdrive`),
+    onSuccess: (r) => { toast.success(`Terunggah ke Google Drive: ${r.uploaded}${r.deleted.length ? ` (${r.deleted.length} backup lama dihapus)` : ""}`); refresh(); },
+    onError: (e) => { toast.error(`Gagal unggah ke Google Drive: ${errMsg(e)}`); qc.invalidateQueries({ queryKey: ["backups", "gdrive"] }); },
+  });
+  const backupToDrive = useMutation({
+    mutationFn: async () => { const b = await apiPost<BackupInfo>("/v1/backups"); return apiPost<GdriveUploadResult>(`/v1/backups/${b.id}/copy-to-gdrive`); },
+    onSuccess: (r) => { toast.success(`Backup baru tersimpan di Google Drive: ${r.uploaded}`); refresh(); },
+    onError: (e) => { toast.error(`Gagal: ${errMsg(e)}`); refresh(); },
+  });
+  const autoDrive = useMutation({
+    mutationFn: (v: boolean) => apiPut<GdriveStatus>("/v1/backups/gdrive/auto", { auto_copy: v }),
+    onSuccess: (s) => { qc.setQueryData(["backups", "gdrive"], s); toast.success(s.auto_copy ? "Backup malam akan otomatis diunggah ke Google Drive" : "Unggah otomatis ke Google Drive dimatikan"); },
     onError: (e) => toast.error(errMsg(e)),
   });
 
@@ -113,13 +131,36 @@ export default function Backup() {
           Salin otomatis backup malam (23:59) ke flashdisk yang sedang tercolok
         </label>
       </div>
+      <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 shadow-sm" data-testid="gdrive-panel">
+        <div className="flex flex-wrap items-center gap-3">
+          <Cloud className="size-5 text-indigo-700" />
+          <h3 className="font-semibold text-indigo-950">Google Drive pemilik</h3>
+          <Badge className={gdOk ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"} data-testid="gdrive-status-badge">
+            {gd.isLoading ? "Memeriksa…" : gdOk ? "Terhubung" : gd.data?.configured ? "Tidak tersambung" : "Belum dihubungkan"}
+          </Badge>
+          <Button size="sm" variant="ghost" onClick={() => gd.refetch()} data-testid="gdrive-refresh-button"><RefreshCw className={gd.isFetching ? "animate-spin" : ""} /> Cek ulang</Button>
+          <Button size="sm" className="ml-auto bg-indigo-700 hover:bg-indigo-800" disabled={!gdOk || backupToDrive.isPending} onClick={() => backupToDrive.mutate()} data-testid="gdrive-backup-now-button">
+            <CloudUpload /> {backupToDrive.isPending ? "Mengunggah…" : "Backup ke Google Drive"}
+          </Button>
+        </div>
+        <div className="mt-2 text-sm" data-testid="gdrive-status-text">
+          {gd.data && (gdOk
+            ? <span className="text-indigo-950">Folder <b>{gd.data.folder}</b> di Google Drive · 30 backup terakhir disimpan{gd.data.quota_free != null ? ` · sisa kuota ${kb(gd.data.quota_free)}` : ""}{gd.data.last_upload_at ? ` · unggahan terakhir ${fmtDateTime(gd.data.last_upload_at)}` : ""}</span>
+            : <span className="text-muted-foreground">{gd.data.reason}. Ikuti panduan <b>docs/GOOGLE-DRIVE.md</b> (sekali setup di server, ±5 menit).</span>)}
+          {gd.data?.last_error && <div className="mt-1 text-rose-700" data-testid="gdrive-last-error">Gagal terakhir: {gd.data.last_error}</div>}
+        </div>
+        <label className="mt-3 flex items-center gap-2 text-sm text-indigo-950">
+          <Checkbox checked={gd.data?.auto_copy ?? false} disabled={autoDrive.isPending || !gd.data} onCheckedChange={(v) => autoDrive.mutate(Boolean(v))} data-testid="gdrive-auto-checkbox" />
+          Unggah otomatis backup malam (23:59) ke Google Drive
+        </label>
+      </div>
       <div className="rounded-2xl border bg-white shadow-sm">
         <Table>
           <TableHeader><TableRow><TableHead>Waktu</TableHead><TableHead>Jenis</TableHead><TableHead>Isi</TableHead><TableHead className="text-right">Ukuran</TableHead><TableHead>Oleh</TableHead><TableHead /></TableRow></TableHeader>
           <TableBody>
             {backups.map((b) => (
               <TableRow key={b.id} data-testid={`backup-row-${b.id}`}>
-                <TableCell className="font-medium">{fmtDateTime(b.created_at)}{b.usb_copied_to?.length > 0 && <span className="ml-1.5 inline-flex items-center gap-0.5 text-xs font-normal text-sky-700" title={`Sudah disalin ke: ${b.usb_copied_to.join(", ")}`} data-testid={`backup-usb-copied-${b.id}`}><Usb className="size-3" />{b.usb_copied_to.join(", ")}</span>}</TableCell>
+                <TableCell className="font-medium">{fmtDateTime(b.created_at)}{b.usb_copied_to?.length > 0 && <span className="ml-1.5 inline-flex items-center gap-0.5 text-xs font-normal text-sky-700" title={`Sudah disalin ke: ${b.usb_copied_to.join(", ")}`} data-testid={`backup-usb-copied-${b.id}`}><Usb className="size-3" />{b.usb_copied_to.join(", ")}</span>}{b.gdrive_uploaded && <span className="ml-1.5 inline-flex items-center gap-0.5 text-xs font-normal text-indigo-700" title="Sudah ada di Google Drive" data-testid={`backup-gdrive-uploaded-${b.id}`}><Cloud className="size-3" />Drive</span>}</TableCell>
                 <TableCell><Badge variant={b.source === "auto" ? "secondary" : "outline"}>{SOURCE[b.source]}</Badge></TableCell>
                 <TableCell className="text-xs text-muted-foreground">{b.collections.products ?? 0} produk · {b.collections.sales ?? 0} transaksi · {b.collections.customers ?? 0} pelanggan</TableCell>
                 <TableCell className="text-right font-mono text-sm">{kb(b.size)}</TableCell>
@@ -127,6 +168,7 @@ export default function Backup() {
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
                     <Button size="icon-sm" variant="ghost" title={target ? `Salin ke flashdisk ${target.label}` : "Colokkan flashdisk ke server"} disabled={!target || !target.writable || toUsb.isPending} onClick={() => toUsb.mutate(b)} data-testid={`backup-usb-${b.id}`}><Usb className="text-sky-700" /></Button>
+                    <Button size="icon-sm" variant="ghost" title={gdOk ? "Unggah ke Google Drive" : "Google Drive belum terhubung"} disabled={!gdOk || toDrive.isPending} onClick={() => toDrive.mutate(b)} data-testid={`backup-gdrive-${b.id}`}><CloudUpload className="text-indigo-700" /></Button>
                     <a className={buttonVariants({ size: "icon-sm", variant: "ghost" })} href={`/api/v1/backups/${b.id}/download`} title="Unduh" data-testid={`backup-download-${b.id}`}><Download /></a>
                     <Button size="icon-sm" variant="ghost" title="Restore" onClick={() => { setTyped(""); setConfirm({ backup: b }); }} data-testid={`backup-restore-${b.id}`}><RotateCcw /></Button>
                     <Button size="icon-sm" variant="ghost" title="Hapus" onClick={() => window.confirm("Hapus backup ini?") && del.mutate(b.id)} data-testid={`backup-delete-${b.id}`}><Trash2 className="text-rose-600" /></Button>

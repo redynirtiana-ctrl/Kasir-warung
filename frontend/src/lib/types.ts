@@ -180,6 +180,7 @@ export interface Settings {
   auto_wa_receipt: boolean;
   birthday_greeting_enabled: boolean;
   usb_backup_auto: boolean;
+  gdrive_backup_auto: boolean;
 }
 
 export interface ChartPoint {
@@ -473,6 +474,27 @@ export interface BackupInfo {
   username: string;
   created_at: string;
   usb_copied_to: string[];
+  gdrive_uploaded: boolean;
+}
+
+export interface GdriveStatus {
+  installed: boolean;
+  configured: boolean;
+  connected: boolean;
+  remote: string;
+  folder: string;
+  reason: string;
+  quota_total: number | null;
+  quota_free: number | null;
+  auto_copy: boolean;
+  last_upload_at: string | null;
+  last_error: string;
+}
+
+export interface GdriveUploadResult {
+  uploaded: string;
+  deleted: string[];
+  retained: number;
 }
 
 export interface UsbDrive {

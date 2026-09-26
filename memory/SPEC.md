@@ -115,3 +115,10 @@ Customers & debt, expenses module (separate from shift drawer expenses), nightly
 
 ## Deploy lokal
 - docs/INSTALL-LOCAL.md, docs/AKSES-HP.md (Tailscale / Cloudflare Tunnel), deploy/install.sh (cek AVX, MongoDB 8.0, Node 22, aturan udev mount USB, cron, lalu menjalankan check.sh), deploy/check.sh (diagnosa saja), deploy/update.sh, nginx conf, systemd unit, crontab.
+
+## Backup ke Google Drive (rclone)
+- integrations/gdrive.py memanggil biner rclone lewat subprocess exec (tanpa shell). Env: RCLONE_BIN, RCLONE_CONFIG (bawaan ~/.config/rclone/rclone.conf milik user service), GDRIVE_REMOTE=gdrive, GDRIVE_FOLDER=WARUNG-BACKUP, GDRIVE_KEEP=30, RCLONE_TIMEOUT_SECONDS=300.
+- status(): cek terpasang, config ada, remote ada di listremotes, lalu lsd (terhubung), lalu about (kuota, opsional). upload(): copyto, lalu lsjson; hanya file wbc-backup-*.json.gz selain 30 terbaru yang dihapus dengan deletefile (masuk sampah Drive). Unggahan diproses satu per satu (asyncio lock). Retry 3x hanya untuk error sementara.
+- API (khusus admin): `GET /api/v1/backups/gdrive` → GdriveStatus; `PUT /api/v1/backups/gdrive/auto` {auto_copy}; `POST /api/v1/backups/{id}/copy-to-gdrive` → GdriveUploadResult {uploaded, deleted[], retained}. Error dikembalikan sebagai 400 dengan pesan ramah. BackupInfo.gdrive_uploaded. Status unggahan terakhir dan error terakhir disimpan di collection meta {key:"gdrive"} (tidak ikut backup/restore). Settings.gdrive_backup_auto: cron backup malam mengunggah dengan retry.
+- UI: panel "Google Drive pemilik" di halaman Backup, ikon awan per baris backup, dan label "Drive" di baris yang sudah terunggah.
+- Pod preview: rclone terpasang, dan remote gdrive adalah alias ke /tmp/fake-gdrive (Drive tiruan).

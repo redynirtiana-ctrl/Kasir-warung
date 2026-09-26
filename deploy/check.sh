@@ -86,6 +86,18 @@ BK="$APP_DIR/backend/backups"
 LAST=$(ls -t "$BK"/wbc-backup-*.json.gz 2>/dev/null | head -1)
 [ -n "$LAST" ] && ok "Backup terakhir: $(basename "$LAST")" || warn "Belum ada file backup" "Menu Backup -> Backup Sekarang"
 [ -f /etc/udev/rules.d/99-warung-usb.rules ] && ok "Aturan mount flashdisk otomatis terpasang" || warn "Aturan mount flashdisk belum ada (Ubuntu Server)" "Jalankan ulang install.sh (Ubuntu Desktop tidak perlu)"
+if command -v rclone >/dev/null; then
+  ok "rclone terpasang ($(rclone version | head -1 | awk '{print $2}'))"
+  RU="${SUDO_USER:-$(whoami)}"
+  if sudo -u "$RU" -H rclone listremotes 2>/dev/null | grep -q '^gdrive:'; then
+    sudo -u "$RU" -H timeout 40 rclone lsd gdrive: --max-depth 1 >/dev/null 2>&1 && ok "Google Drive terhubung (remote gdrive, user $RU)" \
+      || fail "Remote gdrive ada tapi tidak bisa diakses" "Cek internet, lalu: sudo -u $RU -H rclone config reconnect gdrive:"
+  else
+    warn "Google Drive belum dihubungkan (opsional)" "Ikuti docs/GOOGLE-DRIVE.md"
+  fi
+else
+  warn "rclone belum terpasang (untuk Backup ke Google Drive)" "curl https://rclone.org/install.sh | sudo bash"
+fi
 USBN=$(awk '$2 ~ /^\/(media|run\/media|mnt)\// && $3 ~ /^(vfat|exfat|ntfs|ntfs3|fuseblk)$/' /proc/mounts | wc -l)
 [ "$USBN" -gt 0 ] && ok "Flashdisk tercolok: $USBN" || echo "  (info) Tidak ada flashdisk tercolok saat ini"
 
