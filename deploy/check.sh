@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Diagnosa instalasi WARUNG BU CUCUN. Tidak mengubah apa pun, hanya memeriksa.
-# Pemakaian:  cd /opt/warung && sudo bash deploy/check.sh
+# Pemakaian:  sudo warung-check        (setelah install.sh)
+#         atau sudo bash /opt/warung/deploy/check.sh   (dari folder mana pun)
 # Kirim seluruh hasilnya ke developer/AI kalau ada baris [GAGAL].
-APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+APP_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"  # works via symlink / any cwd
 OK=0; FAIL=0; WARN=0
 ok()   { echo -e "  \033[32m[OK]\033[0m    $*"; OK=$((OK+1)); }
 fail() { echo -e "  \033[31m[GAGAL]\033[0m $1"; [ -n "${2:-}" ] && echo -e "          -> Solusi: $2"; FAIL=$((FAIL+1)); }

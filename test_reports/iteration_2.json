@@ -1,0 +1,62 @@
+{
+  "iteration": 2,
+  "summary": "8 backend tests passed (deploy/check.sh bugfix), 26/26 full backend suite passed, 1 browser regression check passed (after restoring pod fixture: reinstalled missing rclone binary + recreated /tmp/fake-usb and /tmp/fake-gdrive dirs, both environmental drift unrelated to app code). All 6 acceptance criteria verified.",
+  "passed": 7,
+  "failed": 0,
+  "bugs": [],
+  "action_items": [
+    "Pod environment drift (not an app bug): rclone binary and /tmp/fake-usb /tmp/fake-gdrive fixture dirs were missing at session start (likely wiped by a container restart). Reinstalled rclone via apt and recreated the fixture dirs so the Google Drive 'Terhubung' / flashdisk panels work as the briefing expects. If the pod is restarted again, these will need to be restored again (apt-get install -y rclone; mkdir -p /tmp/fake-usb/WARUNG-BACKUP /tmp/fake-gdrive) since /tmp and non-persisted apt packages do not survive restarts."
+  ],
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "check.sh works from ANY working directory when called by absolute path (bug report)",
+      "name": "test_check_sh_runs_from_any_cwd_by_absolute_path[/root] / [/tmp]",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "subprocess `bash /app/deploy/check.sh` run with cwd=/root and cwd=/tmp: no 'No such file' in output, output contains 'Folder: /app' and '== Service =='."
+    },
+    {
+      "criterion": "Global command via symlink resolves APP_DIR through readlink -f",
+      "name": "test_check_sh_via_global_symlink_resolves_app_dir",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "/usr/local/bin/warung-check confirmed symlink -> /app/deploy/check.sh; running `warung-check` from /root prints 'Folder: /app' (not /usr/local)."
+    },
+    {
+      "criterion": "Scripts are executable and syntactically valid; install.sh contains symlink creation",
+      "name": "test_deploy_scripts_executable_and_syntax_valid[check.sh|install.sh|update.sh] / test_install_sh_creates_global_symlinks",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "os.access X_OK true for all 3 scripts; `bash -n` returncode 0 for all 3; install.sh content contains '/usr/local/bin/warung-check', '/usr/local/bin/warung-update' and 'ln -sf'. install.sh/update.sh were NOT executed."
+    },
+    {
+      "criterion": "check.sh reads quoted .env values (DB_NAME, WEBHOOK_CRON_SECRET)",
+      "name": "test_check_sh_reads_quoted_env_values",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "/app/backend/.env confirmed to store DB_NAME=\"...\" and WEBHOOK_CRON_SECRET=\"...\" with double quotes; check.sh output contains no 'DB_NAME kosong' / 'WEBHOOK_CRON_SECRET kosong' lines (envget() strips quotes correctly)."
+    },
+    {
+      "criterion": "Docs point to correct commands (No such file or directory explanation)",
+      "name": "manual verification (grep)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "docs/INSTALL-LOCAL.md lines 234-259 contain a dedicated section '## Mengecek instalasi (kalau ada error)' explaining the 'No such file or directory' case with `ls /opt/warung/deploy/`, absolute-path re-run (`sudo bash /opt/warung/deploy/check.sh`), and `git clone`/`git pull` recovery steps. No doc has a standalone relative `sudo bash deploy/check.sh` line (grep for exact relative-only form returned nothing); the only relative mentions are for install.sh assuming the reader already `cd`'d into /opt/warung, which is a different, already-correct context."
+    },
+    {
+      "criterion": "Regression smoke: admin login + /backup page (Flashdisk + Google Drive 'Terhubung')",
+      "name": "tscheck-regression-login-backup",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Logged in as admin/admin123, dashboard visible. Navigated to /backup: usb-panel visible showing 'Terdeteksi: fake-usb'; Google Drive panel eventually shows 'Terhubung' badge (confirmed via GET /api/v1/backups/gdrive -> 200 {connected:true, quota_free>0} after restoring rclone binary + /tmp/fake-gdrive alias target dir, which had been wiped from the pod before this session, unrelated to app code)."
+    },
+    {
+      "criterion": "Full backend regression (no code touched this session, sanity check)",
+      "name": "pytest tests/ (26 tests)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "cd /app/backend && python -m pytest -q -p no:cacheprovider -> 26 passed in 15.32s (includes prior iteration's flashdisk-backup suite + this iteration's 8 new deploy-script tests, minus phase1 baseline)."
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 # Update aplikasi setelah `git pull`. Data & .env tidak disentuh.
 # Pemakaian:  cd /opt/warung && git pull && sudo bash deploy/update.sh
 set -euo pipefail
-APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+APP_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"  # works via symlink / any cwd
 RUN_USER="${SUDO_USER:-$(whoami)}"
 envget() { grep -E "^$1=" "$2" 2>/dev/null | tail -1 | cut -d= -f2- | sed -E "s/^[\"']//; s/[\"']\$//"; }  # strips optional quotes like python-dotenv
 

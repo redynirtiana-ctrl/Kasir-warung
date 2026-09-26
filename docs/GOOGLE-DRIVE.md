@@ -88,7 +88,7 @@ chmod 600 ~warung/.config/rclone/rclone.conf  # file ini berisi kunci akses, jan
    `wbc-backup-....json.gz` akan ada di folder **WARUNG-BACKUP**.
 4. Centang **Unggah otomatis backup malam**.
 
-Cek juga dengan `sudo bash deploy/check.sh`. Baris "Google Drive terhubung" harus **[OK]**.
+Cek juga dengan `sudo warung-check`. Baris "Google Drive terhubung" harus **[OK]**.
 
 ---
 

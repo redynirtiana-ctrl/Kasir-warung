@@ -233,13 +233,33 @@ Kalau disk server rusak, backup di server yang sama ikut hilang.
 
 ## Mengecek instalasi (kalau ada error)
 
+**Setelah install.sh selesai**, cukup ketik ini dari folder mana pun:
+
 ```bash
-cd /opt/warung && sudo bash deploy/check.sh
+sudo warung-check
 ```
 
-Skrip ini hanya memeriksa, tidak mengubah apa pun. Setiap baris **[GAGAL]** disertai solusinya. Kalau masih
-bingung, salin seluruh hasilnya (beserta 30 baris terakhir `sudo bash deploy/install.sh 2>&1 | tee install.log`)
-lalu kirim ke developer/AI.
+**Belum pernah install / muncul `No such file or directory`?** Artinya Anda tidak berada di folder aplikasi,
+atau kode aplikasi belum ada di server. Cek dulu:
+
+```bash
+ls /opt/warung/deploy/        # harus ada: check.sh install.sh update.sh ...
+```
+
+- **Folder ada:** jalankan dengan alamat lengkap: `sudo bash /opt/warung/deploy/check.sh`
+- **Folder tidak ada:** cari di mana kodenya disimpan: `sudo find / -name check.sh -path "*deploy*" 2>/dev/null`
+- **Tidak ketemu sama sekali:** kode belum diunduh ke server. Di Emergent klik **Save to GitHub**, lalu di server:
+  ```bash
+  sudo apt install -y git
+  sudo git clone https://github.com/USERNAME/NAMA-REPO.git /opt/warung
+  sudo chown -R $USER:$USER /opt/warung
+  sudo bash /opt/warung/deploy/install.sh
+  ```
+  (Repo private: GitHub akan meminta username dan *Personal Access Token* sebagai password.)
+- **Folder ada tapi `deploy/` tidak ada:** kode yang diunduh versi lama. Jalankan `cd /opt/warung && git pull`.
+
+Skrip ini hanya memeriksa, tidak mengubah apa pun. Setiap baris **[GAGAL]** disertai solusinya. Salin seluruh
+hasilnya lalu kirim ke developer/AI.
 
 ## CPU lama tanpa AVX
 

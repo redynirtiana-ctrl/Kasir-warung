@@ -94,7 +94,7 @@ Kasir di warung tetap memakai alamat LAN biasa (`http://192.168.1.10`), jadi tid
 - [ ] PIN admin sudah diatur dan tidak diberitahukan ke kasir.
 - [ ] Akun kasir **tidak** diberi izin "Lihat laporan" kalau tidak perlu.
 - [ ] Router warung **tidak** melakukan port forwarding ke server (cek menu *Virtual Server / NAT*).
-- [ ] MongoDB hanya `127.0.0.1` (dicek otomatis oleh `sudo bash deploy/check.sh`).
+- [ ] MongoDB hanya `127.0.0.1` (dicek otomatis oleh `sudo warung-check`).
 - [ ] HP pemilik memakai kunci layar (PIN/sidik jari). Kalau HP hilang: hapus perangkat itu di admin
       Tailscale, lalu ganti password admin.
 - [ ] Setelah selesai memakai di HP umum/HP orang lain, klik **Keluar**.

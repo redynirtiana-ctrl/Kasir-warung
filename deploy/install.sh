@@ -3,7 +3,7 @@
 # Pemakaian:  cd /opt/warung && sudo bash deploy/install.sh
 set -euo pipefail
 
-APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+APP_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"  # works via symlink / any cwd
 RUN_USER="${SUDO_USER:-$(whoami)}"
 IP="$(hostname -I | awk '{print $1}')"
 say() { echo -e "\n\033[1;32m==> $*\033[0m"; }
@@ -130,6 +130,11 @@ command -v ufw >/dev/null && ufw status | grep -q active && ufw allow 80/tcp || 
 say "Cek kesehatan"
 for i in $(seq 1 20); do curl -sf http://127.0.0.1:8001/api/ >/dev/null && break; sleep 1; done
 curl -sf http://127.0.0.1/api/ >/dev/null && echo "Backend & Nginx OK" || echo "PERINGATAN: cek 'journalctl -u warung-api -n 50'"
+
+say "Perintah global: warung-check & warung-update (bisa dijalankan dari folder mana pun)"
+chmod +x "$APP_DIR/deploy/check.sh" "$APP_DIR/deploy/update.sh"
+ln -sf "$APP_DIR/deploy/check.sh" /usr/local/bin/warung-check
+ln -sf "$APP_DIR/deploy/update.sh" /usr/local/bin/warung-update
 
 bash "$APP_DIR/deploy/check.sh" || true
 
