@@ -1,0 +1,81 @@
+{
+  "iteration": 1,
+  "summary": "6 backend tests passed, 5 browser checks passed. Backup-ke-Flashdisk feature fully functional: fake-usb drive detection, one-click backup+copy, per-row copy, auto-copy toggle persistence, security (400/404/403), and regression of existing backup/download/delete flows.",
+  "passed": 5,
+  "failed": 0,
+  "bugs": [],
+  "action_items": [],
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "Admin sees flashdisk panel on Backup page (/backup)",
+      "name": "backup-flashdisk-panel-visible",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "usb-panel visible, usb-status text contains 'fake-usb' and 'WARUNG-BACKUP'; clicking usb-refresh-button triggered GET /api/v1/backups/usb -> 200, panel still shows fake-usb after refetch."
+    },
+    {
+      "criterion": "Admin sees flashdisk panel on Backup page (/backup) - API",
+      "name": "test_usb_status_shows_fake_usb_drive",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/v1/backups/usb -> 200, drives contains label 'fake-usb' with free_bytes>0, auto_copy field present."
+    },
+    {
+      "criterion": "One-click 'Backup ke Flashdisk'",
+      "name": "backup-one-click-to-flashdisk",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Clicked usb-backup-now-button -> POST /api/v1/backups 200; toast text contains 'fake-usb' and 'Aman untuk dicabut'; row backup-usb-copied-{id} visible with 'fake-usb' label."
+    },
+    {
+      "criterion": "One-click 'Backup ke Flashdisk' - file exists on disk",
+      "name": "manual verification",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "ls /tmp/fake-usb/WARUNG-BACKUP/ shows newly created wbc-backup-20260926-014057-manual.json.gz matching the created backup."
+    },
+    {
+      "criterion": "Copy an existing backup row to flashdisk via row USB icon",
+      "name": "backup-row-copy-to-flashdisk",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Created backup via backup-now-button (no usb label), then clicked backup-usb-{id} icon -> POST /api/v1/backups/{id}/copy-to-usb 200 {label:'fake-usb', dest contains WARUNG-BACKUP, size>0}; row then shows usb-copied label."
+    },
+    {
+      "criterion": "Copy an existing backup row to flashdisk via row USB icon - API",
+      "name": "test_backup_now_then_copy_to_usb",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/v1/backups -> 200; POST /api/v1/backups/{id}/copy-to-usb {path:/tmp/fake-usb} -> 200 {label:fake-usb, dest:.../WARUNG-BACKUP/..., size matches}; GET /api/v1/backups shows usb_copied_to contains fake-usb."
+    },
+    {
+      "criterion": "Auto-copy toggle 'Salin otomatis backup malam'",
+      "name": "backup-auto-copy-toggle-persists",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "usb-auto-checkbox toggled true -> PUT /api/v1/backups/usb/auto 200 {auto_copy:true}; page reload confirms aria-checked=true persisted; toggled back to false -> PUT 200 {auto_copy:false}, confirmed unchecked; final state left unchecked."
+    },
+    {
+      "criterion": "Auto-copy toggle persistence - API",
+      "name": "test_auto_copy_toggle_persists_then_reset",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "PUT /api/v1/backups/usb/auto {auto_copy:true} -> 200; re-GET /api/v1/backups/usb confirms auto_copy:true; PUT false -> 200; re-GET confirms false. State restored to original value."
+    },
+    {
+      "criterion": "Security of copy endpoint",
+      "name": "test_copy_to_usb_rejects_non_detected_path / test_copy_to_usb_unknown_backup_id_404 / test_kasir_forbidden_on_usb_status",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/v1/backups/{id}/copy-to-usb {path:/etc} -> 400 'Flashdisk tidak ditemukan'; POST .../tscheck-unknown-id-xyz/copy-to-usb -> 404 'Backup tidak ditemukan'; kasir GET /api/v1/backups/usb -> 403."
+    },
+    {
+      "criterion": "Regression: existing backup features",
+      "name": "backup-regression-basic-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "backup-now-button -> POST /api/v1/backups 200, row appears; download link href = /api/v1/backups/{id}/download; delete icon -> DELETE /api/v1/backups/{id} 200, row removed. Restore not exercised per instructions."
+    }
+  ]
+}

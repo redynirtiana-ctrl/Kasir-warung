@@ -106,3 +106,12 @@ Customers & debt, expenses module (separate from shift drawer expenses), nightly
 - current_store_id(user) membaca user.store_id langsung dari DB setiap request, jadi perubahan cabang langsung berlaku. Penjualan, pembelian, produk baru, dan histori stok ditandai dengan cabang pengguna yang melakukannya (histori stok mengikuti cabang pengguna, bukan cabang produk).
 - Stok masih satu gudang bersama. Admin melihat semua data; transaksi admin masuk ke cabang admin.
 - Cabang yang masih punya pengguna aktif tidak bisa dinonaktifkan, dan cabang yang masih punya pengguna atau data tidak bisa dihapus.
+
+## Backup ke Flashdisk
+- lib/usb.py: detect_drives() membaca /proc/mounts dan mengambil filesystem vfat/exfat/ntfs/ntfs3/fuseblk/msdos yang di-mount di bawah /media/, /run/media/, atau /mnt/, ditambah folder dari env USB_BACKUP_EXTRA_DIRS (dipisah koma). Di pod preview, USB_BACKUP_EXTRA_DIRS=/tmp/fake-usb berperan sebagai flashdisk palsu.
+- copy_to_drive(): hanya menerima path drive yang terdeteksi (path lain ditolak 400). Menyalin ke <drive>/WARUNG-BACKUP/ lewat file .part lalu rename, os.sync(), cek ukuran, dan menyimpan 30 file terakhir.
+- API (khusus admin): `GET /api/v1/backups/usb` → UsbStatus {drives[], auto_copy}; `PUT /api/v1/backups/usb/auto` {auto_copy}; `POST /api/v1/backups/{id}/copy-to-usb` {path} → UsbCopyResult {label, dest, size}. BackupInfo.usb_copied_to[] mencatat label drive tujuan. Settings.usb_backup_auto: kalau aktif, cron backup malam menyalin ke semua drive yang terdeteksi.
+- UI: panel "Flashdisk di server" di halaman Backup (Cek ulang, pilih drive kalau ada >1, "Backup ke Flashdisk", centang salin otomatis), ikon USB per baris backup, dan label drive tujuan di baris yang sudah disalin.
+
+## Deploy lokal
+- docs/INSTALL-LOCAL.md, docs/AKSES-HP.md (Tailscale / Cloudflare Tunnel), deploy/install.sh (cek AVX, MongoDB 8.0, Node 22, aturan udev mount USB, cron, lalu menjalankan check.sh), deploy/check.sh (diagnosa saja), deploy/update.sh, nginx conf, systemd unit, crontab.

@@ -7,7 +7,7 @@ Susunan aplikasi:
 
 | Bagian    | Teknologi                         | Berjalan sebagai                     |
 |-----------|-----------------------------------|--------------------------------------|
-| Database  | MongoDB 7                         | service `mongod`                     |
+| Database  | MongoDB 8                         | service `mongod`                     |
 | Backend   | Python 3.11 + FastAPI (port 8001) | service systemd `warung-api`         |
 | Frontend  | React (file statis hasil build)   | disajikan oleh Nginx (port 80)       |
 | Terjadwal | cron Linux                        | laporan malam, backup, WA pagi       |
@@ -38,7 +38,7 @@ sudo bash deploy/install.sh
 
 Skrip ini menjalankan langkah 1–7 di bawah secara otomatis: memasang MongoDB, Python, Node, dan Nginx,
 membuat `.env` dengan secret acak, mengisi data awal, build frontend, lalu menyalakan service.
-Anda bisa langsung loncat ke **Langkah 8 (Uji coba)**. Kalau ada langkah yang gagal, ikuti langkah
+Di akhir, skrip menjalankan pemeriksaan otomatis (`deploy/check.sh`). Setelah itu Anda bisa langsung loncat ke **Langkah 8 (Uji coba)**. Kalau ada langkah yang gagal, ikuti langkah
 manual di bawah.
 
 ---
@@ -60,17 +60,19 @@ sudo apt install -y python3.11 python3.11-venv
 
 Lalu ganti `python3` dengan `python3.11` pada langkah 3.
 
-## 2. MongoDB 7
+## 2. MongoDB 8.0
+
+> **Cek dulu CPU:** `grep -qw avx /proc/cpuinfo && echo OK || echo TIDAK-ADA-AVX`. Kalau hasilnya
+> TIDAK-ADA-AVX, lihat bagian **CPU lama tanpa AVX** di bawah.
 
 ```bash
-curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
-echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg
+echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/8.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
 sudo apt update && sudo apt install -y mongodb-org
 sudo systemctl enable --now mongod
 mongosh --eval 'db.runCommand({ping:1})'   # harus menampilkan ok: 1
 ```
 
-> Untuk Ubuntu 24.04 (noble), ganti `$(lsb_release -cs)` dengan `jammy` kalau repo noble belum tersedia.
 > MongoDB hanya mendengarkan `127.0.0.1`, jadi tidak terbuka ke jaringan. Biarkan seperti itu.
 
 ## 3. Backend
@@ -126,7 +128,7 @@ Log backend: `journalctl -u warung-api -f`
 ## 5. Frontend (build)
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -   # Vite 8 butuh Node 20.19+ / 22.12+
 sudo apt install -y nodejs
 sudo npm install -g yarn
 cd /opt/warung/frontend
@@ -189,6 +191,18 @@ Kalau firewall aktif: `sudo ufw allow 80/tcp` (dan `443/tcp` kalau memakai HTTPS
 - **Scanner barcode USB:** cukup dicolokkan, tidak perlu driver. Scanner bekerja seperti keyboard.
 - **Layar pelanggan:** buka `http://192.168.1.10/display` di monitor kedua.
 
+## 10b. Backup ke Flashdisk
+
+Menu **Backup** punya panel **Flashdisk di server**:
+1. Colokkan flashdisk (format FAT32, exFAT, atau NTFS) ke **komputer server**, lalu tunggu 5 detik dan klik **Cek ulang**.
+2. Klik **Backup ke Flashdisk** untuk membuat backup baru langsung ke flashdisk. Bisa juga klik ikon USB di baris backup lama.
+3. File tersimpan di folder `WARUNG-BACKUP` di flashdisk (30 file terakhir disimpan). Setelah muncul tulisan "Aman untuk dicabut", flashdisk boleh dicabut.
+4. Centang **Salin otomatis backup malam** supaya backup jam 23:59 langsung disalin ke flashdisk yang sedang tercolok.
+
+Ubuntu Desktop memasang flashdisk otomatis. Ubuntu Server memakai aturan udev yang dipasang oleh `install.sh`
+(`/etc/udev/rules.d/99-warung-usb.rules`, lokasi mount `/media/warung-usb/...`).
+Folder lain seperti NAS bisa ditambahkan lewat `.env`: `USB_BACKUP_EXTRA_DIRS=/mnt/nas-backup`.
+
 ## 11. HTTPS (kalau memakai domain / VPS)
 
 ```bash
@@ -212,6 +226,34 @@ jalankan `sudo systemctl restart warung-api`.
 
 **Sangat disarankan:** salin file backup ke flashdisk atau Google Drive seminggu sekali.
 Kalau disk server rusak, backup di server yang sama ikut hilang.
+
+## Mengecek instalasi (kalau ada error)
+
+```bash
+cd /opt/warung && sudo bash deploy/check.sh
+```
+
+Skrip ini hanya memeriksa, tidak mengubah apa pun. Setiap baris **[GAGAL]** disertai solusinya. Kalau masih
+bingung, salin seluruh hasilnya (beserta 30 baris terakhir `sudo bash deploy/install.sh 2>&1 | tee install.log`)
+lalu kirim ke developer/AI.
+
+## CPU lama tanpa AVX
+
+MongoDB 5 ke atas butuh CPU yang punya instruksi AVX. Banyak Celeron/Pentium lama (sebelum ±2011) dan
+sebagian Atom tidak punya. Pilihannya:
+1. **Disarankan:** pakai mini-PC bekas yang lebih baru (Intel gen-4 ke atas atau AMD Ryzen).
+2. Jalankan MongoDB 4.4 lewat Docker (tetap kompatibel dengan aplikasi):
+   ```bash
+   sudo apt install -y docker.io
+   sudo docker run -d --name mongo --restart always -p 127.0.0.1:27017:27017 -v /opt/mongo-data:/data/db mongo:4.4.18
+   ```
+   Lalu jalankan install.sh dengan melewati cek AVX dan instalasi MongoDB. Hapus baris `exit 1` di
+   bagian "Cek CPU" pada `deploy/install.sh`, dan biarkan `mongod` tidak terpasang. `MONGO_URL` tetap
+   `mongodb://127.0.0.1:27017`.
+
+## Akses dari HP di luar warung
+
+Lihat **[AKSES-HP.md](AKSES-HP.md)**: pakai Tailscale (gratis, aman, tanpa membuka port router).
 
 ## Masalah umum
 

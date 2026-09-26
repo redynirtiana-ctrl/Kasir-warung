@@ -4,11 +4,12 @@
 set -euo pipefail
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 RUN_USER="${SUDO_USER:-$(whoami)}"
+envget() { grep -E "^$1=" "$2" 2>/dev/null | tail -1 | cut -d= -f2- | sed -E "s/^[\"']//; s/[\"']\$//"; }  # strips optional quotes like python-dotenv
 
 echo "==> Backup database sebelum update"
-DB_NAME="$(grep '^DB_NAME=' "$APP_DIR/backend/.env" | cut -d= -f2)"
+DB_NAME="$(envget DB_NAME "$APP_DIR/backend/.env")"
 mkdir -p "$APP_DIR/backend/backups/pre-update"
-mongodump --quiet --db "$DB_NAME" --gzip --out "$APP_DIR/backend/backups/pre-update/$(date +%F-%H%M)"
+command -v mongodump >/dev/null && mongodump --quiet --db "$DB_NAME" --gzip --out "$APP_DIR/backend/backups/pre-update/$(date +%F-%H%M)"
 
 echo "==> Dependency backend"
 cd "$APP_DIR/backend"

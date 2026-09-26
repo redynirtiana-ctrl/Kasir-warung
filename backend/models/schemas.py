@@ -227,7 +227,8 @@ class Settings(BaseModel):
     expiry_warning_days: int = Field(default=30, ge=1, le=365)
     morning_summary_enabled: bool = True  # auto-send at 07:00 WIB via Fonnte (needs token)
     birthday_greeting_enabled: bool = True  # auto-send birthday wishes to members at 07:00 WIB (Fonnte)
-    auto_wa_receipt: bool = False  # send receipt to member's WhatsApp after each sale (Fonnte)
+    auto_wa_receipt: bool = False
+    usb_backup_auto: bool = False  # copy nightly backup to plugged-in flashdisk  # send receipt to member's WhatsApp after each sale (Fonnte)
 
 
 # ---------- dashboard ----------
@@ -507,6 +508,34 @@ class BackupInfo(BaseModel):
     collections: dict[str, int]
     username: str
     created_at: datetime
+    usb_copied_to: list[str] = []  # flashdisk labels this backup was copied to
+
+
+class UsbDrive(BaseModel):
+    path: str
+    label: str
+    total_bytes: int
+    free_bytes: int
+    writable: bool
+
+
+class UsbStatus(BaseModel):
+    drives: list[UsbDrive]
+    auto_copy: bool  # copy each nightly auto-backup to every detected flashdisk
+
+
+class UsbAutoIn(BaseModel):
+    auto_copy: bool
+
+
+class UsbCopyIn(BaseModel):
+    path: str
+
+
+class UsbCopyResult(BaseModel):
+    label: str
+    dest: str
+    size: int
 
 
 # ---------- import ----------

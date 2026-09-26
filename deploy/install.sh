@@ -7,15 +7,23 @@ APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 RUN_USER="${SUDO_USER:-$(whoami)}"
 IP="$(hostname -I | awk '{print $1}')"
 say() { echo -e "\n\033[1;32m==> $*\033[0m"; }
+envget() { grep -E "^$1=" "$2" 2>/dev/null | tail -1 | cut -d= -f2- | sed -E "s/^[\"']//; s/[\"']\$//"; }  # strips optional quotes like python-dotenv
 
 [ "$(id -u)" -eq 0 ] || { echo "Jalankan dengan sudo"; exit 1; }
 
 say "Zona waktu -> Asia/Jakarta"
 timedatectl set-timezone Asia/Jakarta || true
 
+say "Cek CPU (MongoDB 5+ butuh instruksi AVX)"
+if ! grep -qw avx /proc/cpuinfo; then
+  echo "GAGAL: CPU ini tidak mendukung AVX, jadi MongoDB versi baru tidak bisa jalan."
+  echo "Lihat docs/INSTALL-LOCAL.md bagian 'CPU lama tanpa AVX'."
+  exit 1
+fi
+
 say "Paket sistem"
 apt-get update
-apt-get install -y curl git gnupg nginx software-properties-common lsb-release
+apt-get install -y curl git gnupg nginx software-properties-common lsb-release openssl exfatprogs ntfs-3g
 
 PY=python3
 if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'; then
@@ -29,24 +37,27 @@ else
 fi
 
 if ! command -v mongod >/dev/null; then
-  say "Memasang MongoDB 7"
-  CODENAME="$(lsb_release -cs)"; [ "$CODENAME" = "noble" ] && CODENAME="jammy"
-  curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | gpg --dearmor --yes -o /usr/share/keyrings/mongodb-server-7.0.gpg
-  echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu ${CODENAME}/mongodb-org/7.0 multiverse" > /etc/apt/sources.list.d/mongodb-org-7.0.list
+  say "Memasang MongoDB 8.0"
+  CODENAME="$(lsb_release -cs)"
+  case "$CODENAME" in jammy|noble) ;; *) echo "Ubuntu $CODENAME belum didukung MongoDB 8.0 — pakai Ubuntu 22.04/24.04"; exit 1 ;; esac
+  curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | gpg --dearmor --yes -o /usr/share/keyrings/mongodb-server-8.0.gpg
+  echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu ${CODENAME}/mongodb-org/8.0 multiverse" > /etc/apt/sources.list.d/mongodb-org-8.0.list
   apt-get update
   apt-get install -y mongodb-org
 fi
 systemctl enable --now mongod
+for i in $(seq 1 30); do mongosh --quiet --eval 'db.runCommand({ping:1}).ok' 2>/dev/null | grep -q 1 && break; sleep 1; done
 
-if ! command -v node >/dev/null || [ "$(node -v | cut -c2- | cut -d. -f1)" -lt 20 ]; then
-  say "Memasang Node.js 20"
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+if ! command -v node >/dev/null || [ "$(node -v | cut -c2- | cut -d. -f1)" -lt 22 ]; then
+  say "Memasang Node.js 22 (Vite 8 butuh Node 20.19+/22.12+)"
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt-get install -y nodejs
 fi
 command -v yarn >/dev/null || npm install -g yarn
 
 say "Backend: virtualenv + dependency"
 cd "$APP_DIR/backend"
+[ -x venv/bin/python ] && ! venv/bin/python -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' && rm -rf venv
 sudo -u "$RUN_USER" $PY -m venv venv
 grep -v '^emergentintegrations' requirements.txt > /tmp/req-local.txt
 sudo -u "$RUN_USER" venv/bin/pip install --upgrade pip
@@ -63,8 +74,8 @@ if [ ! -f .env ] || grep -q "GANTI_DENGAN\|emergentagent\|emergent.host" .env; t
   chown "$RUN_USER" .env && chmod 600 .env
   FIRST_INSTALL=1
 fi
-CRON_SECRET="$(grep '^WEBHOOK_CRON_SECRET=' .env | cut -d= -f2)"
-DB_NAME="$(grep '^DB_NAME=' .env | cut -d= -f2)"
+CRON_SECRET="$(envget WEBHOOK_CRON_SECRET .env)"
+DB_NAME="$(envget DB_NAME .env)"
 
 if [ "$FIRST_INSTALL" = 1 ]; then
   COUNT="$(mongosh --quiet --eval "db.getSiblingDB('${DB_NAME}').users.countDocuments()" 2>/dev/null || echo 0)"
@@ -93,6 +104,16 @@ d="$APP_DIR/frontend/dist"; while [ "$d" != "/" ]; do chmod o+x "$d"; d="$(dirna
 chmod -R o+r "$APP_DIR/frontend/dist"
 nginx -t && systemctl reload nginx
 
+say "Mount flashdisk otomatis (untuk Backup ke Flashdisk)"
+RUID="$(id -u "$RUN_USER")"; RGID="$(id -g "$RUN_USER")"
+cat > /etc/udev/rules.d/99-warung-usb.rules <<RULES
+# WARUNG BU CUCUN: mount flashdisk (FAT/exFAT/NTFS) ke /media/warung-usb/<nama> agar bisa dipakai menu Backup
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}=="vfat|exfat|ntfs", RUN{program}+="/usr/bin/systemd-mount --no-block --collect --options=uid=${RUID},gid=${RGID},umask=0022 \$devnode /media/warung-usb/%k"
+ACTION=="remove", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", RUN{program}+="/usr/bin/systemd-umount /media/warung-usb/%k"
+RULES
+mkdir -p /media/warung-usb
+udevadm control --reload-rules || true
+
 say "Jadwal otomatis (crontab user ${RUN_USER})"
 TMP="$(mktemp)"
 ( sudo -u "$RUN_USER" crontab -l 2>/dev/null | grep -v '/api/v1/cron/' | grep -v '^CRON_TZ=Asia/Jakarta' || true
@@ -104,6 +125,8 @@ command -v ufw >/dev/null && ufw status | grep -q active && ufw allow 80/tcp || 
 say "Cek kesehatan"
 for i in $(seq 1 20); do curl -sf http://127.0.0.1:8001/api/ >/dev/null && break; sleep 1; done
 curl -sf http://127.0.0.1/api/ >/dev/null && echo "Backend & Nginx OK" || echo "PERINGATAN: cek 'journalctl -u warung-api -n 50'"
+
+bash "$APP_DIR/deploy/check.sh" || true
 
 cat <<EOF
 

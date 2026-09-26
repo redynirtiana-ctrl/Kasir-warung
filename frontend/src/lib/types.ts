@@ -179,6 +179,7 @@ export interface Settings {
   morning_summary_enabled: boolean;
   auto_wa_receipt: boolean;
   birthday_greeting_enabled: boolean;
+  usb_backup_auto: boolean;
 }
 
 export interface ChartPoint {
@@ -471,6 +472,34 @@ export interface BackupInfo {
   collections: Record<string, number>;
   username: string;
   created_at: string;
+  usb_copied_to: string[];
+}
+
+export interface UsbDrive {
+  path: string;
+  label: string;
+  total_bytes: number;
+  free_bytes: number;
+  writable: boolean;
+}
+
+export interface UsbStatus {
+  drives: UsbDrive[];
+  auto_copy: boolean;
+}
+
+export interface UsbAutoIn {
+  auto_copy: boolean;
+}
+
+export interface UsbCopyIn {
+  path: string;
+}
+
+export interface UsbCopyResult {
+  label: string;
+  dest: string;
+  size: number;
 }
 
 export interface ImportRow {

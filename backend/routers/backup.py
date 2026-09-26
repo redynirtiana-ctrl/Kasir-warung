@@ -15,7 +15,9 @@ from fastapi.responses import FileResponse
 
 from lib.auth import audit, require_admin
 from lib.db import db, ensure_indexes
-from models.schemas import BackupInfo
+from routers.sales import get_settings
+from lib.usb import copy_to_drive, detect_drives
+from models.schemas import BackupInfo, UsbAutoIn, UsbCopyIn, UsbCopyResult, UsbDrive, UsbStatus
 
 router = APIRouter(prefix="/backups", tags=["backup"])
 cron_router = APIRouter(prefix="/cron", tags=["cron"])
@@ -88,6 +90,42 @@ async def backup_now(admin: dict = Depends(require_admin)):
     return info
 
 
+@router.get("/usb", response_model=UsbStatus)
+async def usb_status(_: dict = Depends(require_admin)):
+    drives = await asyncio.to_thread(detect_drives)
+    return UsbStatus(drives=[UsbDrive(**d) for d in drives], auto_copy=(await get_settings()).usb_backup_auto)
+
+
+@router.put("/usb/auto", response_model=UsbStatus)
+async def usb_auto(body: UsbAutoIn, admin: dict = Depends(require_admin)):
+    await db.settings.update_one({"key": "store"}, {"$set": {"usb_backup_auto": body.auto_copy}}, upsert=True)
+    await audit(admin, "usb_backup_auto", str(body.auto_copy))
+    return await usb_status(admin)
+
+
+async def _copy(b: dict, path: str) -> UsbCopyResult:
+    src = BACKUP_DIR / b["filename"]
+    if not src.exists():
+        raise HTTPException(404, "File backup tidak ditemukan")
+    try:
+        res = await asyncio.to_thread(copy_to_drive, src, path)
+    except (OSError, PermissionError) as e:
+        logger.warning("usb copy failed %s -> %s: %s", b["filename"], path, e)
+        raise HTTPException(400, str(e) or "Gagal menyalin ke flashdisk")
+    await db.backups.update_one({"id": b["id"]}, {"$addToSet": {"usb_copied_to": res["label"]}})
+    return UsbCopyResult(**res)
+
+
+@router.post("/{id}/copy-to-usb", response_model=UsbCopyResult)
+async def copy_backup_to_usb(id: str, body: UsbCopyIn, admin: dict = Depends(require_admin)):
+    b = await db.backups.find_one({"id": id}, {"_id": 0})
+    if not b:
+        raise HTTPException(404, "Backup tidak ditemukan")
+    res = await _copy(b, body.path)
+    await audit(admin, "backup_copy_usb", f"{b['filename']} -> {res.dest}")
+    return res
+
+
 @router.get("/{id}/download")
 async def download(id: str, _: dict = Depends(require_admin)):
     b = await db.backups.find_one({"id": id})
@@ -126,9 +164,21 @@ async def delete_backup(id: str, admin: dict = Depends(require_admin)):
 
 async def _auto_job(run_id: str) -> None:
     try:
-        await create_backup("auto", "system")
+        info = await create_backup("auto", "system")
     except Exception:
         logger.exception("auto backup failed (run %s)", run_id)
+        return
+    if not (await get_settings()).usb_backup_auto:
+        return
+    drives = await asyncio.to_thread(detect_drives)
+    if not drives:
+        logger.warning("auto backup: salin ke flashdisk aktif, tetapi tidak ada flashdisk terdeteksi")
+    for d in drives:
+        try:
+            await _copy(info.model_dump(), d["path"])
+            logger.info("auto backup copied to %s", d["path"])
+        except Exception:
+            logger.exception("auto backup copy to %s failed", d["path"])
 
 
 @cron_router.post("/backup", status_code=202)

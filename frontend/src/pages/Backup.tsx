@@ -1,9 +1,10 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { DatabaseBackup, Download, RotateCcw, Trash2, Upload, ShieldAlert, Moon } from "lucide-react";
-import { apiDelete, apiGet, apiPost, apiUpload } from "@/lib/api";
-import type { BackupInfo } from "@/lib/types";
+import { DatabaseBackup, Download, RotateCcw, Trash2, Upload, ShieldAlert, Moon, Usb, RefreshCw } from "lucide-react";
+import { apiDelete, apiGet, apiPost, apiPut, apiUpload } from "@/lib/api";
+import type { BackupInfo, UsbCopyResult, UsbStatus } from "@/lib/types";
+import { Checkbox } from "@/components/ui/checkbox";
 import { errMsg, fmtDateTime } from "@/lib/format";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,26 @@ export default function Backup() {
   const [typed, setTyped] = useState("");
   const { data: backups = [] } = useQuery({ queryKey: ["backups"], queryFn: () => apiGet<BackupInfo[]>("/v1/backups") });
   const refresh = () => qc.invalidateQueries({ queryKey: ["backups"] });
+
+  const usb = useQuery({ queryKey: ["backups", "usb"], queryFn: () => apiGet<UsbStatus>("/v1/backups/usb"), refetchInterval: 10000 });
+  const drives = usb.data?.drives ?? [];
+  const [drivePath, setDrivePath] = useState("");
+  const target = drives.find((d) => d.path === drivePath) ?? drives[0];
+  const toUsb = useMutation({
+    mutationFn: (b: BackupInfo) => apiPost<UsbCopyResult>(`/v1/backups/${b.id}/copy-to-usb`, { path: target!.path }),
+    onSuccess: (r) => { toast.success(`Tersalin ke flashdisk ${r.label} (${kb(r.size)}). Aman untuk dicabut.`); refresh(); },
+    onError: (e) => toast.error(`Gagal salin ke flashdisk: ${errMsg(e)}`),
+  });
+  const backupToUsb = useMutation({
+    mutationFn: async () => { const b = await apiPost<BackupInfo>("/v1/backups"); return apiPost<UsbCopyResult>(`/v1/backups/${b.id}/copy-to-usb`, { path: target!.path }); },
+    onSuccess: (r) => { toast.success(`Backup baru tersimpan di flashdisk ${r.label}. Aman untuk dicabut.`); refresh(); },
+    onError: (e) => { toast.error(`Gagal: ${errMsg(e)}`); refresh(); },
+  });
+  const autoUsb = useMutation({
+    mutationFn: (v: boolean) => apiPut<UsbStatus>("/v1/backups/usb/auto", { auto_copy: v }),
+    onSuccess: (s) => { toast.success(s.auto_copy ? "Backup malam akan otomatis disalin ke flashdisk" : "Salin otomatis ke flashdisk dimatikan"); qc.invalidateQueries({ queryKey: ["backups", "usb"] }); },
+    onError: (e) => toast.error(errMsg(e)),
+  });
 
   const create = useMutation({
     mutationFn: () => apiPost<BackupInfo>("/v1/backups"),
@@ -64,7 +85,33 @@ export default function Backup() {
         </div>
       </div>
       <div className="flex items-center gap-2 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
-        <Moon className="size-4" /> Backup otomatis berjalan setiap malam. Unduh backup secara berkala dan simpan di flashdisk / Google Drive untuk keamanan ekstra.
+        <Moon className="size-4" /> Backup otomatis berjalan setiap malam. Simpan salinan di flashdisk (panel di bawah) atau Google Drive supaya data aman walau komputer server rusak.
+      </div>
+      <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4 shadow-sm" data-testid="usb-panel">
+        <div className="flex flex-wrap items-center gap-3">
+          <Usb className="size-5 text-sky-700" />
+          <h3 className="font-semibold text-sky-900">Flashdisk di server</h3>
+          <Button size="sm" variant="ghost" onClick={() => usb.refetch()} data-testid="usb-refresh-button"><RefreshCw className={usb.isFetching ? "animate-spin" : ""} /> Cek ulang</Button>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {drives.length > 1 && (
+              <select value={target?.path ?? ""} onChange={(e) => setDrivePath(e.target.value)} className="h-8 rounded-md border bg-white px-2 text-sm" data-testid="usb-drive-select">
+                {drives.map((d) => <option key={d.path} value={d.path}>{`${d.label} (sisa ${kb(d.free_bytes)})`}</option>)}
+              </select>
+            )}
+            <Button size="sm" className="bg-sky-700 hover:bg-sky-800" disabled={!target || !target.writable || backupToUsb.isPending} onClick={() => backupToUsb.mutate()} data-testid="usb-backup-now-button">
+              <Usb /> {backupToUsb.isPending ? "Menyalin…" : "Backup ke Flashdisk"}
+            </Button>
+          </div>
+        </div>
+        <div className="mt-2 text-sm" data-testid="usb-status">
+          {drives.length === 0
+            ? <span className="text-muted-foreground">Belum ada flashdisk terdeteksi. Colokkan flashdisk ke <b>komputer server</b> (bukan komputer kasir), tunggu beberapa detik, lalu klik Cek ulang.</span>
+            : <span className="text-sky-900">Terdeteksi: {drives.map((d) => `${d.label} — sisa ${kb(d.free_bytes)} dari ${kb(d.total_bytes)}${d.writable ? "" : " (tidak bisa ditulisi)"}`).join(" · ")}. File disimpan di folder <b>WARUNG-BACKUP</b> (30 terakhir).</span>}
+        </div>
+        <label className="mt-3 flex items-center gap-2 text-sm text-sky-950">
+          <Checkbox checked={usb.data?.auto_copy ?? false} disabled={autoUsb.isPending || !usb.data} onCheckedChange={(v) => autoUsb.mutate(Boolean(v))} data-testid="usb-auto-checkbox" />
+          Salin otomatis backup malam (23:59) ke flashdisk yang sedang tercolok
+        </label>
       </div>
       <div className="rounded-2xl border bg-white shadow-sm">
         <Table>
@@ -72,13 +119,14 @@ export default function Backup() {
           <TableBody>
             {backups.map((b) => (
               <TableRow key={b.id} data-testid={`backup-row-${b.id}`}>
-                <TableCell className="font-medium">{fmtDateTime(b.created_at)}</TableCell>
+                <TableCell className="font-medium">{fmtDateTime(b.created_at)}{b.usb_copied_to?.length > 0 && <span className="ml-1.5 inline-flex items-center gap-0.5 text-xs font-normal text-sky-700" title={`Sudah disalin ke: ${b.usb_copied_to.join(", ")}`} data-testid={`backup-usb-copied-${b.id}`}><Usb className="size-3" />{b.usb_copied_to.join(", ")}</span>}</TableCell>
                 <TableCell><Badge variant={b.source === "auto" ? "secondary" : "outline"}>{SOURCE[b.source]}</Badge></TableCell>
                 <TableCell className="text-xs text-muted-foreground">{b.collections.products ?? 0} produk · {b.collections.sales ?? 0} transaksi · {b.collections.customers ?? 0} pelanggan</TableCell>
                 <TableCell className="text-right font-mono text-sm">{kb(b.size)}</TableCell>
                 <TableCell>{b.username}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
+                    <Button size="icon-sm" variant="ghost" title={target ? `Salin ke flashdisk ${target.label}` : "Colokkan flashdisk ke server"} disabled={!target || !target.writable || toUsb.isPending} onClick={() => toUsb.mutate(b)} data-testid={`backup-usb-${b.id}`}><Usb className="text-sky-700" /></Button>
                     <a className={buttonVariants({ size: "icon-sm", variant: "ghost" })} href={`/api/v1/backups/${b.id}/download`} title="Unduh" data-testid={`backup-download-${b.id}`}><Download /></a>
                     <Button size="icon-sm" variant="ghost" title="Restore" onClick={() => { setTyped(""); setConfirm({ backup: b }); }} data-testid={`backup-restore-${b.id}`}><RotateCcw /></Button>
                     <Button size="icon-sm" variant="ghost" title="Hapus" onClick={() => window.confirm("Hapus backup ini?") && del.mutate(b.id)} data-testid={`backup-delete-${b.id}`}><Trash2 className="text-rose-600" /></Button>
