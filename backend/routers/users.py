@@ -19,8 +19,9 @@ async def create_user(body: UserCreate, admin: dict = Depends(require_admin)):
     username = body.username.lower()
     if await db.users.find_one({"username": username}):
         raise HTTPException(409, "Username sudah dipakai")
+    await _check_store(body.store_id)
     doc = {"id": str(uuid.uuid4()), "username": username, "full_name": body.full_name,
-           "role": body.role, "active": True, "password_hash": hash_password(body.password)}
+           "role": body.role, "active": True, "password_hash": hash_password(body.password), "store_id": body.store_id}
     if body.permissions is not None:
         doc["permissions"] = _clean(body.permissions)
     await db.users.insert_one(doc)
@@ -32,7 +33,8 @@ async def create_user(body: UserCreate, admin: dict = Depends(require_admin)):
 async def update_user(id: str, body: UserUpdate, admin: dict = Depends(require_admin)):
     if id == admin["id"] and (body.role != "admin" or not body.active):
         raise HTTPException(400, "Tidak bisa menurunkan role / menonaktifkan akun sendiri")
-    update = {"full_name": body.full_name, "role": body.role, "active": body.active}
+    await _check_store(body.store_id)
+    update = {"full_name": body.full_name, "role": body.role, "active": body.active, "store_id": body.store_id}
     if body.permissions is not None:
         update["permissions"] = _clean(body.permissions)
     if body.password:
@@ -43,8 +45,13 @@ async def update_user(id: str, body: UserUpdate, admin: dict = Depends(require_a
                                              projection={"_id": 0, "password_hash": 0}, return_document=True)
     if not doc:
         raise HTTPException(404, "Pengguna tidak ditemukan")
-    await audit(admin, "user_update", f"{doc['username']} izin={','.join(effective_permissions(doc))}")
+    await audit(admin, "user_update", f"{doc['username']} cabang={body.store_id} izin={','.join(effective_permissions(doc))}")
     return _out(doc)
+
+
+async def _check_store(store_id: str) -> None:
+    if not await db.stores.find_one({"id": store_id, "active": True}):
+        raise HTTPException(400, "Cabang tidak ditemukan atau nonaktif")
 
 
 def _clean(perms: list[str]) -> list[str]:

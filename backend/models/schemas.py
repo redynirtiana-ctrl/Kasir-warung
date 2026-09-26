@@ -31,6 +31,7 @@ class User(BaseModel):
     active: bool = True
     permissions: list[str] = []  # effective permissions (admin = all)
     has_pin: bool = False
+    store_id: str = "main"  # cabang tempat pengguna bekerja; transaksi baru ditandai dengan cabang ini
 
 
 class PermissionInfo(BaseModel):
@@ -45,6 +46,7 @@ class UserCreate(BaseModel):
     role: Role
     password: str = Field(min_length=6, max_length=100)
     permissions: list[str] | None = None
+    store_id: str = "main"
 
 
 class UserUpdate(BaseModel):
@@ -53,6 +55,7 @@ class UserUpdate(BaseModel):
     active: bool
     password: str | None = Field(default=None, max_length=100)
     permissions: list[str] | None = None
+    store_id: str = "main"
 
 
 # ---------- categories ----------

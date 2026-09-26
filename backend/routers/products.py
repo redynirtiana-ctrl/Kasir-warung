@@ -44,7 +44,7 @@ async def record_movement(product: dict, type_: str, qty: float, before: float, 
         "id": str(uuid.uuid4()), "product_id": product["id"], "product_name": product["name"],
         "type": type_, "qty": qty, "stock_before": before, "stock_after": after,
         "user_id": user["id"], "username": user["username"], "note": note,
-        "store_id": product.get("store_id") or current_store_id(user),
+        "store_id": current_store_id(user),  # branch of the user who moved the stock
         "created_at": datetime.now(timezone.utc),
     })
 

@@ -48,6 +48,8 @@ async def update_store(id: str, body: StoreIn, admin: dict = Depends(require_adm
         raise HTTPException(404, "Cabang tidak ditemukan")
     if doc.get("is_main") and not body.active:
         raise HTTPException(400, "Cabang utama tidak dapat dinonaktifkan")
+    if not body.active and await db.users.find_one({"store_id": id, "active": True}):
+        raise HTTPException(400, "Masih ada pengguna aktif di cabang ini — pindahkan dulu")
     await _check_code(body.code, id)
     upd = {**body.model_dump(), "code": body.code.upper()}
     await db.stores.update_one({"id": id}, {"$set": upd})
@@ -62,7 +64,7 @@ async def delete_store(id: str, admin: dict = Depends(require_admin)):
     doc = await db.stores.find_one({"id": id})
     if not doc:
         raise HTTPException(404, "Cabang tidak ditemukan")
-    for coll in TAGGED_COLLECTIONS:
+    for coll in (*TAGGED_COLLECTIONS, "users"):
         if await db[coll].find_one({"store_id": id}):
             raise HTTPException(409, "Cabang sudah memiliki data — nonaktifkan saja")
     await db.stores.delete_one({"id": id})

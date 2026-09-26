@@ -100,3 +100,9 @@ Customers & debt, expenses module (separate from shift drawer expenses), nightly
 - `GET /api/v1/promo/broadcast` → PromoDraft {text (dibuat otomatis dari produk dengan harga promo aktif; {nama} diganti nama member), promo_products, recipients (member yang punya WA), fonnte_configured, sent_this_week (dihitung sejak Senin, zona waktu toko), last_campaign}
 - `POST /api/v1/promo/broadcast` {text, mode: fonnte|link} → PromoCampaign. Mode fonnte: asyncio task mengirim bertahap dengan jeda PROMO_SEND_DELAY_SECONDS (env, bawaan 6 detik + jitter) dan menyimpan hasil per member; hanya boleh ada 1 kampanye running; kalau token Fonnte kosong → 400. Mode link: kampanye hanya dicatat, lalu admin membuka wa.me satu per satu.
 - `GET /api/v1/promo/campaigns/{id}` untuk memantau progres (frontend polling tiap 2 detik selama running). Admin mendapat peringatan (tetap bisa kirim) kalau promo sudah dikirim minggu ini. Collection: promo_campaigns.
+
+## Cabang per pengguna
+- User.store_id (bawaan "main"). Diatur admin lewat pilihan "Cabang tempat bekerja" di form Pengguna (hanya cabang aktif, divalidasi di backend). Tabel Pengguna menampilkan kolom Cabang.
+- current_store_id(user) membaca user.store_id langsung dari DB setiap request, jadi perubahan cabang langsung berlaku. Penjualan, pembelian, produk baru, dan histori stok ditandai dengan cabang pengguna yang melakukannya (histori stok mengikuti cabang pengguna, bukan cabang produk).
+- Stok masih satu gudang bersama. Admin melihat semua data; transaksi admin masuk ke cabang admin.
+- Cabang yang masih punya pengguna aktif tidak bisa dinonaktifkan, dan cabang yang masih punya pengguna atau data tidak bisa dihapus.

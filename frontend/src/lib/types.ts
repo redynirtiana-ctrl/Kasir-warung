@@ -9,6 +9,7 @@ export interface User {
   active: boolean;
   permissions: Permission[];
   has_pin: boolean;
+  store_id: string;
 }
 
 export type Permission = "give_discount" | "sell_on_credit" | "void_sale" | "process_returns" | "receive_debt_payment" | "view_reports";
@@ -28,6 +29,7 @@ export interface UserCreate {
   role: Role;
   password: string;
   permissions?: Permission[] | null;
+  store_id: string;
 }
 
 export interface UserUpdate {
@@ -35,6 +37,7 @@ export interface UserUpdate {
   role: Role;
   active: boolean;
   password: string | null;
+  store_id: string;
 }
 
 export interface CategoryIn {

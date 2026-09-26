@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Pencil, KeyRound } from "lucide-react";
+import { Plus, Pencil, KeyRound, Building2 } from "lucide-react";
 import { apiGet, apiPost, apiPut } from "@/lib/api";
-import type { Role, User, UserCreate, Permission, PermissionInfo } from "@/lib/types";
+import type { Role, Store, User, UserCreate, Permission, PermissionInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { errMsg } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,8 @@ interface Form extends UserCreate { active: boolean; permissions: Permission[] }
 
 export default function Users() {
   const qc = useQueryClient();
+  const { data: stores = [] } = useQuery({ queryKey: ["stores"], queryFn: () => apiGet<Store[]>("/v1/stores") });
+  const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? "Cabang Utama";
   const [editing, setEditing] = useState<User | null>(null);
   const [form, setForm] = useState<Form | null>(null);
   const { data: users = [] } = useQuery({ queryKey: ["users"], queryFn: () => apiGet<User[]>("/v1/users") });
@@ -35,8 +37,8 @@ export default function Users() {
   const save = useMutation({
     mutationFn: (f: Form) =>
       editing
-        ? apiPut<User>(`/v1/users/${editing.id}`, { full_name: f.full_name, role: f.role, active: f.active, password: f.password || null, permissions: f.permissions })
-        : apiPost<User>("/v1/users", { username: f.username, full_name: f.full_name, role: f.role, password: f.password, permissions: f.permissions }),
+        ? apiPut<User>(`/v1/users/${editing.id}`, { full_name: f.full_name, role: f.role, active: f.active, password: f.password || null, permissions: f.permissions, store_id: f.store_id })
+        : apiPost<User>("/v1/users", { username: f.username, full_name: f.full_name, role: f.role, password: f.password, permissions: f.permissions, store_id: f.store_id }),
     onSuccess: (u) => { toast.success(`Pengguna ${u.username} disimpan`); setForm(null); qc.invalidateQueries({ queryKey: ["users"] }); },
     onError: (e) => toast.error(errMsg(e)),
   });
@@ -50,21 +52,22 @@ export default function Users() {
         </div>
         <div className="flex gap-2">
         <Button variant="outline" onClick={() => setPinOpen(true)} data-testid="set-pin-button"><KeyRound /> Atur PIN Persetujuan Saya</Button>
-        <Button onClick={() => { setEditing(null); setForm({ username: "", full_name: "", role: "kasir", password: "", active: true, permissions: defaults }); }} data-testid="add-user-button"><Plus /> Tambah Pengguna</Button></div>
+        <Button onClick={() => { setEditing(null); setForm({ username: "", full_name: "", role: "kasir", password: "", active: true, permissions: defaults, store_id: "main" }); }} data-testid="add-user-button"><Plus /> Tambah Pengguna</Button></div>
       </div>
       <div className="rounded-2xl border bg-white shadow-sm">
         <Table>
-          <TableHeader><TableRow><TableHead>Username</TableHead><TableHead>Nama</TableHead><TableHead>Role</TableHead><TableHead>Hak akses</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Username</TableHead><TableHead>Nama</TableHead><TableHead>Role</TableHead><TableHead>Cabang</TableHead><TableHead>Hak akses</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
           <TableBody>
             {users.map((u) => (
               <TableRow key={u.id} data-testid={`user-row-${u.username}`}>
                 <TableCell className="font-mono">{u.username}</TableCell>
                 <TableCell>{u.full_name}</TableCell>
                 <TableCell><Badge className={u.role === "admin" ? "bg-amber-100 text-amber-900" : "bg-green-100 text-green-900"}>{u.role === "admin" ? "Admin / Owner" : "Kasir"}</Badge></TableCell>
+                <TableCell data-testid={`user-store-${u.username}`}><span className="inline-flex items-center gap-1 text-sm"><Building2 className="size-3.5 text-emerald-700" />{storeName(u.store_id)}</span></TableCell>
                 <TableCell className="max-w-72 text-xs text-muted-foreground" data-testid={`user-perms-${u.username}`}>{u.role === "admin" ? (u.has_pin ? "Semua akses · PIN aktif" : "Semua akses · PIN belum diatur") : catalog.filter((p) => u.permissions.includes(p.key)).map((p) => p.label.split(" (")[0]).join(", ") || "Transaksi saja"}</TableCell>
                 <TableCell>{u.active ? "Aktif" : <Badge variant="outline">Nonaktif</Badge>}</TableCell>
                 <TableCell className="text-right">
-                  <Button size="icon-sm" variant="ghost" onClick={() => { setEditing(u); setForm({ username: u.username, full_name: u.full_name, role: u.role, password: "", active: u.active, permissions: u.permissions }); }} data-testid={`user-edit-${u.username}`}><Pencil /></Button>
+                  <Button size="icon-sm" variant="ghost" onClick={() => { setEditing(u); setForm({ username: u.username, full_name: u.full_name, role: u.role, password: "", active: u.active, permissions: u.permissions, store_id: u.store_id ?? "main" }); }} data-testid={`user-edit-${u.username}`}><Pencil /></Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -83,6 +86,13 @@ export default function Users() {
                 <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })} className="h-9 w-full rounded-md border px-2 text-sm" data-testid="user-role-select">
                   <option value="kasir">Kasir</option><option value="admin">Admin / Owner</option>
                 </select>
+              </div>
+              <div className="space-y-1">
+                <Label>Cabang tempat bekerja</Label>
+                <select value={form.store_id} onChange={(e) => setForm({ ...form, store_id: e.target.value })} className="h-9 w-full rounded-md border px-2 text-sm" data-testid="user-store-select">
+                  {stores.filter((s) => s.active || s.id === form.store_id).map((s) => <option key={s.id} value={s.id}>{`${s.name} (${s.code})`}</option>)}
+                </select>
+                <p className="text-xs text-muted-foreground">Transaksi, pembelian & histori stok dari pengguna ini tercatat di cabang ini. Stok masih satu gudang bersama.</p>
               </div>
               <div className="space-y-1"><Label>{editing ? "Password baru (opsional)" : "Password (min 6)"}</Label><Input type="password" required={!editing} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} data-testid="user-password-input" /></div>
               <div className="space-y-2 rounded-lg border border-green-200 bg-green-50/60 p-3" data-testid="user-permissions">
