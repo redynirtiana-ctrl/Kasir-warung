@@ -17,6 +17,8 @@ frontend/src/
 ```
 
 ## Instalasi (server Ubuntu)
+> Panduan lengkap server lokal/VPS: **[INSTALL-LOCAL.md](INSTALL-LOCAL.md)** — skrip otomatis `sudo bash deploy/install.sh`.
+
 1. Install Python 3.11+, Node.js 20+, yarn, MongoDB 7.
 2. `backend/.env`: `MONGO_URL`, `DB_NAME`, `CORS_ORIGINS`, `JWT_SECRET` (acak, panjang), `STORE_TZ=Asia/Jakarta`.
 3. `cd backend && pip install -r requirements.txt && python seed.py`

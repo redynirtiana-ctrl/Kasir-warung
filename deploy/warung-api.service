@@ -1,0 +1,17 @@
+[Unit]
+Description=WARUNG BU CUCUN - Backend API (FastAPI)
+After=network.target mongod.service
+Wants=mongod.service
+
+[Service]
+Type=simple
+User=warung
+WorkingDirectory=/opt/warung/backend
+# Satu worker: tugas latar (WA promo, struk otomatis) berjalan di proses ini.
+ExecStart=/opt/warung/backend/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8001 --workers 1 --proxy-headers
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+# Jadwal otomatis WARUNG BU CUCUN (zona waktu server harus Asia/Jakarta)
+# Ganti ISI_WEBHOOK_CRON_SECRET dengan nilai WEBHOOK_CRON_SECRET di backend/.env
+CRON_TZ=Asia/Jakarta
+
+# 23:55 - simpan laporan penjualan harian
+55 23 * * * curl -s -X POST -H "Authorization: Bearer ISI_WEBHOOK_CRON_SECRET" http://127.0.0.1:8001/api/v1/cron/daily-report >/dev/null 2>&1
+
+# 23:59 - backup database otomatis (14 terakhir disimpan di backend/backups)
+59 23 * * * curl -s -X POST -H "Authorization: Bearer ISI_WEBHOOK_CRON_SECRET" http://127.0.0.1:8001/api/v1/cron/backup >/dev/null 2>&1
+
+# 07:00 - ringkasan WA pagi ke pemilik + ucapan ulang tahun member (butuh token Fonnte)
+0 7 * * * curl -s -X POST -H "Authorization: Bearer ISI_WEBHOOK_CRON_SECRET" http://127.0.0.1:8001/api/v1/cron/morning-summary >/dev/null 2>&1
